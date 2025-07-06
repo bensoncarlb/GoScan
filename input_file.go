@@ -1,16 +1,33 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
 
 type InputFile struct {
-	size      int
-	name, src string
+	Size int    `json:"size"`
+	Name string `json:"name"`
+	Src  string `json:"src"`
+}
+
+func data(w http.ResponseWriter, req *http.Request) {
+	d := &InputFile{}
+	err := json.NewDecoder(req.Body).Decode(d)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%+v\n", d)
+	w.WriteHeader(http.StatusCreated)
 }
 
 func main() {
@@ -23,9 +40,15 @@ func main() {
 	defer fsWatch.Close()
 
 	//Add directory
-	if err := fsWatch.Add("."); err != nil {
+	if err := fsWatch.Add("test"); err != nil {
 		panic(err)
 	}
+
+	go func() {
+		http.HandleFunc("/data", data)
+
+		http.ListenAndServe(":8090", nil)
+	}()
 
 	//Spawn worker
 	for range 1 {
@@ -39,7 +62,7 @@ func main() {
 
 					if event.Has(fsnotify.Write) {
 						println("1")
-						//time.Sleep(time.Millisecond * 500)
+						time.Sleep(time.Millisecond * 500)
 
 						f, err := os.ReadFile(event.Name)
 
@@ -47,9 +70,24 @@ func main() {
 							panic(err)
 						}
 
-						i := InputFile{size: len(f), name: event.Name, src: "file"}
+						i := InputFile{Size: len(f), Name: event.Name, Src: "file"}
 
-						fmt.Println(i)
+						b := new(bytes.Buffer)
+
+						err = json.NewEncoder(b).Encode(i)
+						if err != nil {
+							panic(err)
+						}
+
+						resp, err := http.Post("http://localhost:8090/data", "application/json", b)
+
+						if err != nil {
+							panic(err)
+						}
+
+						defer resp.Body.Close()
+
+						fmt.Println(resp.Status)
 					}
 				case event, ok := <-fsWatch.Errors:
 					if !ok {
