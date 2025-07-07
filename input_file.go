@@ -16,6 +16,7 @@ type InputFile struct {
 	Size int    `json:"size"`
 	Name string `json:"name"`
 	Src  string `json:"src"`
+	Data []byte `json:"data"`
 }
 
 func data(w http.ResponseWriter, req *http.Request) {
@@ -28,6 +29,15 @@ func data(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Printf("%+v\n", d)
 	w.WriteHeader(http.StatusCreated)
+
+	f, err := os.Create("rcvd" + d.Name)
+
+	if err != nil {
+		panic(err)
+	}
+
+	f.Write(d.Data)
+	f.Close()
 }
 
 func main() {
@@ -61,7 +71,6 @@ func main() {
 					}
 
 					if event.Has(fsnotify.Write) {
-						println("1")
 						time.Sleep(time.Millisecond * 500)
 
 						f, err := os.ReadFile(event.Name)
@@ -70,7 +79,7 @@ func main() {
 							panic(err)
 						}
 
-						i := InputFile{Size: len(f), Name: event.Name, Src: "file"}
+						i := InputFile{Size: len(f), Name: event.Name[5:], Src: "file", Data: f}
 
 						b := new(bytes.Buffer)
 
