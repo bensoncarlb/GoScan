@@ -50,6 +50,16 @@ func main() {
 	defer fsWatch.Close()
 
 	//Add directory
+	_, err = os.Stat("test")
+
+	if os.IsNotExist(err) {
+		err = os.Mkdir("test", os.ModePerm)
+
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	if err := fsWatch.Add("test"); err != nil {
 		panic(err)
 	}
