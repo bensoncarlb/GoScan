@@ -9,25 +9,14 @@ import (
 	"os"
 	"os/signal"
 
-	gs_s "github.com/bensoncb/GoScan/structs"
+	"github.com/bensoncb/GoScan/internal/ocr"
+	"github.com/bensoncb/GoScan/internal/structs"
 )
-
-func DirCheck(p string) {
-	_, err := os.Stat(p)
-
-	if errors.Is(err, os.ErrNotExist) {
-		err = os.Mkdir(p, os.ModePerm)
-
-		if err != nil {
-			panic(err)
-		}
-	}
-}
 
 func data(w http.ResponseWriter, req *http.Request) {
 	log.Println("Received new request", req.RemoteAddr)
 
-	d := &gs_s.InputFile{}
+	d := &structs.InputFile{}
 	err := json.NewDecoder(req.Body).Decode(d)
 
 	if err != nil {
@@ -43,20 +32,35 @@ func data(w http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 
-	f.Write(d.Data)
-	f.Close()
-}
+	defer f.Close()
 
-func httpwatcher() {
-	log.Println("Data Server Starting up")
-	DirCheck("rcvd")
-	http.ListenAndServe(":8090", nil)
+	f.Write(d.Data)
+
+	s, err := ocr.ReadImage(&d.Data)
+
+	if err != nil {
+		panic(err)
+	}
+
+	println(s)
 }
 
 func main() {
+	_, err := os.Stat("rcvd")
+
+	if errors.Is(err, os.ErrNotExist) {
+		err = os.Mkdir("rcvd", os.ModePerm)
+
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	http.HandleFunc("/data", data)
 
-	go httpwatcher()
+	log.Println("Data Server Starting up")
+
+	go http.ListenAndServe(":8090", nil)
 
 	//Wait for kill
 	kill := make(chan os.Signal, 1)

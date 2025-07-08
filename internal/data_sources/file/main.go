@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"time"
 
-	gs_s "github.com/bensoncb/GoScan/structs"
+	"github.com/bensoncb/GoScan/internal/structs"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -46,7 +46,7 @@ func filewatcher(fsWatch *fsnotify.Watcher) {
 					panic(err)
 				}
 
-				i := gs_s.InputFile{Size: len(f), Name: event.Name[5:], Src: "file", Data: f}
+				i := structs.InputFile{Size: len(f), Name: event.Name[5:], Src: "file", Data: f}
 
 				b := new(bytes.Buffer)
 
@@ -83,7 +83,15 @@ func main() {
 
 	defer fsWatch.Close()
 
-	DirCheck("test")
+	_, err = os.Stat("test")
+
+	if errors.Is(err, os.ErrNotExist) {
+		err = os.Mkdir("test", os.ModePerm)
+
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	if err := fsWatch.Add("test"); err != nil {
 		panic(err)
@@ -99,7 +107,4 @@ func main() {
 	signal.Notify(kill, os.Interrupt)
 
 	<-kill
-
-	//Close channels
-	fsWatch.Close()
 }

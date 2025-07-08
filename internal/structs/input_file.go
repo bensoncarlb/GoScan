@@ -1,4 +1,4 @@
-package goscan_structs
+package structs
 
 type InputFile struct {
 	Size int    `json:"size"`
