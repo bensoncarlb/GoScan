@@ -15,18 +15,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-func DirCheck(p string) {
-	_, err := os.Stat(p)
-
-	if errors.Is(err, os.ErrNotExist) {
-		err = os.Mkdir(p, os.ModePerm)
-
-		if err != nil {
-			panic(err)
-		}
-	}
-}
-
 func filewatcher(fsWatch *fsnotify.Watcher) {
 	log.Println("File watcher starting up")
 	for {
