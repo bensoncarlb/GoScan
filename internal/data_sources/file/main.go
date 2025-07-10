@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/bensoncb/GoScan/internal/structs"
+	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -34,7 +34,7 @@ func filewatcher(fsWatch *fsnotify.Watcher) {
 					panic(err)
 				}
 
-				i := structs.InputFile{Size: len(f), Name: event.Name[5:], Src: "file", Data: f}
+				i := inputFile.InputFile{Size: len(f), Name: event.Name[5:], Src: "file", Data: f}
 
 				b := new(bytes.Buffer)
 

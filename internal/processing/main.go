@@ -8,16 +8,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"net"
 
 	"github.com/bensoncb/GoScan/internal/ocr"
-	"github.com/bensoncb/GoScan/internal/structs"
+	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
-type data_rcvd struct {
-	ch chan structs.InputFile
+type server struct {
+	ch      chan inputFile.InputFile
+	isReady bool
+	httpServer 	http.Server
+	l net.Listener
 }
 
-func process(ch <-chan structs.InputFile) {
+func process(ch <-chan inputFile.InputFile) {
 	for {
 		//Block waiting for new item to process
 		d := <-ch
@@ -48,47 +52,70 @@ func process(ch <-chan structs.InputFile) {
 	}
 }
 
-func (dr *data_rcvd) data(w http.ResponseWriter, req *http.Request) {
+func (dr *server) data(w http.ResponseWriter, req *http.Request) {
 	log.Println("Received new request", req.RemoteAddr)
 
-	d := &structs.InputFile{}
-	err := json.NewDecoder(req.Body).Decode(d)
+	d := inputFile.InputFile{}
+	err := json.NewDecoder(req.Body).Decode(&d)
 
 	if err != nil {
 		panic(err)
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	dr.ch <- d
+	w.WriteHeader(http.StatusAccepted)
+}
 
-	dr.ch <- *d
+func (dr *server) ping(w http.ResponseWriter, req *http.Request) {
+	if dr.isReady {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func main() {
 	log.Println("Data Server Starting up")
 
 	//Check the directory to (for now) store received data in exists
-	_, err := os.Stat("rcvd")
-
-	if errors.Is(err, os.ErrNotExist) {
+	if fi, err := os.Stat("rcvd"); errors.Is(err, os.ErrNotExist) {
 		err = os.Mkdir("rcvd", os.ModePerm)
 
 		if err != nil {
 			panic(err)
 		}
+	} else if !fi.IsDir() {
+		panic("Dir exists as a file")
 	}
 
 	//Setup a channel for processing incoming input files
-	ch_process := &data_rcvd{ch: make(chan structs.InputFile)}
+	svr := &server{ch: make(chan inputFile.InputFile)}
 
 	for range 1 {
 		//Kick off routine(s) to listen for new items to process
-		go process(ch_process.ch)
+		go process(svr.ch)
+	}
+	
+	var err error
+	svr.l, err = net.Listen("tcp", ":8090")
+
+	if err != nil{
+		panic(err)
 	}
 
-	//Setup HTTP listener and handler
-	http.HandleFunc("/data", ch_process.data)
+	defer svr.l.Close()
 
-	go http.ListenAndServe(":8090", nil)
+	svr.httpServer = http.Server{}
+	sm := http.NewServeMux()
+
+	sm.HandleFunc("/data", svr.data)
+	sm.HandleFunc("/ping", svr.ping)
+
+	svr.httpServer.Handler = sm
+
+	go svr.httpServer.Serve(svr.l)
+
+	svr.isReady = true
 
 	//Wait for kill
 	kill := make(chan os.Signal, 1)

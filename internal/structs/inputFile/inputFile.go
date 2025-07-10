@@ -1,4 +1,4 @@
-package structs
+package inputFile
 
 type InputFile struct {
 	Size int    `json:"size"`
