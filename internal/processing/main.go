@@ -5,50 +5,45 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"net"
 
 	"github.com/bensoncb/GoScan/internal/ocr"
+	outputfile "github.com/bensoncb/GoScan/internal/outputs/file"
 	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
 type server struct {
-	ch      chan inputFile.InputFile
-	isReady bool
-	httpServer 	http.Server
-	l net.Listener
+	ch         chan inputFile.InputFile
+	isReady    bool
+	httpServer http.Server
+	l          net.Listener
 }
 
-func process(ch <-chan inputFile.InputFile) {
+func process(ch <-chan inputFile.InputFile, outHandler func(inputFile.InputFile) error) {
 	for {
 		//Block waiting for new item to process
-		d := <-ch
+		ifData := <-ch
 
-		log.Println("Process routine received new item for processing: ", d.Name)
+		log.Println("Process routine received new item for processing: ", ifData.Name)
 
-		//Save off received data
-		f, err := os.Create("rcvd/" + d.Name)
-
-		if err != nil {
+		if err := outHandler(ifData); err != nil {
 			panic(err)
 		}
 
-		f.Write(d.Data)
-		f.Close()
-
 		//"Read" the incoming item for indexing data
-		s, err := ocr.ReadImage(&d.Data)
+		ocrData, err := ocr.ReadImage(&ifData.Data)
 
 		if err != nil {
 			panic(err)
 		}
 
 		//Print off results
-		println(s)
+		println(ocrData)
 
-		fmt.Println(d)
+		fmt.Println(ifData)
 	}
 }
 
@@ -91,15 +86,26 @@ func main() {
 	//Setup a channel for processing incoming input files
 	svr := &server{ch: make(chan inputFile.InputFile)}
 
+	//Setup handler for outputing final data
+	var outputMethod string = "file" //Placeholder for switch below pending config support
+	var outHandler func(inputFile.InputFile) error
+
+	switch outputMethod {
+	case "file":
+		outHandler = outputfile.OutputFile
+	default:
+		panic(fmt.Errorf("unrecognized output method %s", outputMethod))
+	}
+
 	for range 1 {
 		//Kick off routine(s) to listen for new items to process
-		go process(svr.ch)
+		go process(svr.ch, outHandler)
 	}
-	
+
 	var err error
 	svr.l, err = net.Listen("tcp", ":8090")
 
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 
