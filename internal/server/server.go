@@ -38,6 +38,10 @@ func (s *Server) Setup() error {
 }
 
 func (s *Server) Start() error {
+	if s.isReady {
+		return nil
+	}
+
 	var err error
 
 	s.l, err = net.Listen("tcp", ":8090") //TODO Port assignment
@@ -59,6 +63,8 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Stop() error {
+	s.isReady = false
+
 	s.l.Close()
 	s.httpServer.Close()
 	close(s.ch)
