@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	paramerror "github.com/bensoncb/GoScan/internal/errors"
 	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
@@ -24,7 +25,7 @@ func TestBadArgs(t *testing.T) {
 
 	if err == nil {
 		t.Fatalf("Missing Size not detected.")
-	} else if !errors.Is(err, inputFile.ErrBadParam{}) {
+	} else if !errors.Is(err, paramerror.ErrBadParam{}) {
 		t.Fatalf("Unexpected error returned: %s", err)
 	} else if iFile.Name != name {
 		t.Fatalf("Setting Name property failed. Acutal: %s, Expected: %s", iFile.Name, name)

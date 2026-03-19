@@ -1,10 +1,12 @@
 package outputFile
 
 import (
-	"fmt"
+	"errors"
+	"log"
 	"os"
 	"path"
 
+	paramerror "github.com/bensoncb/GoScan/internal/errors"
 	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
@@ -13,22 +15,12 @@ type OutputModule struct {
 	IFile     inputFile.InputFile
 }
 
-type ErrBadParam struct {
-	Parameter string
-	Reason    string
-}
-
-func (e ErrBadParam) Error() string {
-	return fmt.Sprintf("Invalid parameter %s, Reason: %s", e.Parameter, e.Reason)
-}
-
-func (e ErrBadParam) Is(err error) bool {
-	_, ok := err.(ErrBadParam)
-	return ok
-}
-
 func (o *OutputModule) Save() error {
-	println("recieved output data")
+	log.Printf("recieved output data: %s", o.IFile.Name)
+
+	if len(o.IFile.Name) == 0 {
+		return paramerror.ErrBadParam{Parameter: "Name", Reason: "Missing"}
+	}
 	//Save off received data
 	fil, err := os.Create(path.Join(o.Directory, o.IFile.Name))
 
@@ -48,10 +40,25 @@ func New(Directory string) (OutputModule, error) {
 	var err error = nil
 
 	if len(Directory) == 0 {
-		err = ErrBadParam{Parameter: "Directory", Reason: "Missing"}
+		err = paramerror.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
 	}
 
 	outModule.Directory = Directory
+
+	if err != nil {
+		return outModule, err
+	}
+
+	//Check the directory to store received data in exists
+	fi, err := os.Stat(Directory)
+
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			err = os.Mkdir(Directory, os.ModePerm)
+		}
+	} else if !fi.IsDir() {
+		err = paramerror.ErrBadParam{Parameter: "Directory", Reason: "Directory is a File"}
+	}
 
 	return outModule, err
 }

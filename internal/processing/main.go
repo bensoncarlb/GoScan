@@ -1,127 +1,59 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 
-	"github.com/bensoncb/GoScan/internal/ocr"
+	"github.com/bensoncb/GoScan/internal/data_sources/sourceFile"
 	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
-	"github.com/bensoncb/GoScan/internal/structs/inputFile"
+	"github.com/bensoncb/GoScan/internal/server"
 )
 
-type server struct {
-	ch         chan inputFile.InputFile
-	isReady    bool
-	httpServer http.Server
-	l          net.Listener
-}
+func main() {
+	//Setup handler for outputing final data
+	var outputMethod string = "file" //Placeholder for switch below pending config support
+	var outputDir string = "/home/carl/GoScan/rcvd"
+	var inputDir string = "/home/carl/GoScan/test"
 
-func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) {
-	for {
-		//Block waiting for new item to process
-		outModule.IFile = <-ch
-
-		log.Println("Process routine received new item for processing: ", outModule.IFile.Name)
-
-		if err := outModule.Save(); err != nil {
-			panic(err)
-		}
-
-		//"Read" the incoming item for indexing data
-		ocrData, err := ocr.ReadImage(&outModule.IFile.Data)
-
-		if err != nil {
-			panic(err)
-		}
-
-		//Print off results
-		println(ocrData)
-
-		fmt.Println(outModule.IFile)
-	}
-}
-
-func (dr *server) data(w http.ResponseWriter, req *http.Request) {
-	log.Println("Received new request", req.RemoteAddr)
-
-	d := inputFile.InputFile{}
-	err := json.NewDecoder(req.Body).Decode(&d)
+	ModOutput, err := outputFile.New(outputDir)
 
 	if err != nil {
 		panic(err)
 	}
-
-	dr.ch <- d
-	w.WriteHeader(http.StatusAccepted)
-}
-
-func (dr *server) ping(w http.ResponseWriter, req *http.Request) {
-	if dr.isReady {
-		w.WriteHeader(http.StatusOK)
-	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-func main() {
-	log.Println("Data Server Starting up")
-
-	//Check the directory to (for now) store received data in exists
-	if fi, err := os.Stat("rcvd"); errors.Is(err, os.ErrNotExist) {
-		err = os.Mkdir("rcvd", os.ModePerm)
-
-		if err != nil {
-			panic(err)
-		}
-	} else if !fi.IsDir() {
-		panic("Dir exists as a file")
-	}
-
-	//Setup a channel for processing incoming input files
-	svr := &server{ch: make(chan inputFile.InputFile)}
-
-	//Setup handler for outputing final data
-	var outputMethod string = "file" //Placeholder for switch below pending config support
-	outputModule := outputFile.OutputModule{}
 
 	switch outputMethod {
 	case "file":
-		outputModule.Directory = "rcvd"
+		//TODO
 	default:
-		panic(fmt.Errorf("unrecognized output method %s", outputMethod))
+		panic(fmt.Errorf("Unrecognized output method %s", outputMethod))
 	}
 
-	for range 1 {
-		//Kick off routine(s) to listen for new items to process
-		go process(svr.ch, &outputModule)
+	//Setup listening server
+	svr := server.Server{ModOutput: &ModOutput}
+
+	if err := svr.Setup(); err != nil {
+		panic(err)
 	}
 
-	var err error
-	svr.l, err = net.Listen("tcp", ":8090")
+	if err := svr.Start(); err != nil {
+		panic(err)
+	}
+
+	defer svr.Stop()
+
+	//Setup DataInput listener
+	DataInput, err := sourceFile.New(inputDir, "http://localhost:8090/data")
 
 	if err != nil {
 		panic(err)
 	}
 
-	defer svr.l.Close()
+	if err := DataInput.Start(); err != nil {
+		panic(err)
+	}
 
-	svr.httpServer = http.Server{}
-	sm := http.NewServeMux()
-
-	sm.HandleFunc("/data", svr.data)
-	sm.HandleFunc("/ping", svr.ping)
-
-	svr.httpServer.Handler = sm
-
-	go svr.httpServer.Serve(svr.l)
-
-	svr.isReady = true
+	defer DataInput.Stop()
 
 	//Wait for kill
 	kill := make(chan os.Signal, 1)
