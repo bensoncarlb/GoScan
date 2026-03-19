@@ -10,6 +10,9 @@ import (
 	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
+/*
+* Test a basic valid scenario
+ */
 func TestGoodOutput(t *testing.T) {
 	TestFile := "TestInit"
 	TestData := []byte("TestInit")

@@ -1,11 +1,11 @@
-// Package inputFile does X
+// Struct and handling for incoming document metadata and handling
 package inputFile
 
 import (
 	paramerror "github.com/bensoncb/GoScan/internal/errors"
 )
 
-// InputFile is a metadata representation of a file that has been ingested.
+// InputFile is a metadata representation of a dcument that has been ingested.
 type InputFile struct {
 	Size    int    `json:"size"`
 	Name    string `json:"name"`
@@ -25,6 +25,9 @@ type Region struct {
 	EndY   int32
 }
 
+/*
+* Setup a new InputFile for a document
+ */
 func New(Size int, Name string, Data []byte) (InputFile, error) {
 	iFile := InputFile{}
 	var err error = nil

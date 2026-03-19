@@ -11,6 +11,9 @@ import (
 	"github.com/bensoncb/GoScan/internal/server"
 )
 
+/*
+* Test basic initialization and file pick up
+ */
 func TestInit(t *testing.T) {
 	OutDir := t.TempDir()
 	InDir := t.TempDir()
@@ -47,6 +50,10 @@ func TestInit(t *testing.T) {
 	}
 }
 
+/*
+* Spin up a new processing server (server.go)
+* to watch the provided TempDir for testing files
+ */
 func StartServer(OutDir string) *server.Server {
 	//Setup handler for outputing final data
 	ModOutput, err := outputFile.New(OutDir)

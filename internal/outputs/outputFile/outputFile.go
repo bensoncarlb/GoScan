@@ -1,3 +1,4 @@
+// Output module for saving result to file storage
 package outputFile
 
 import (
@@ -15,12 +16,16 @@ type OutputModule struct {
 	IFile     inputFile.InputFile
 }
 
+/*
+* Take the provided OutputModule.IFile and save the data to a file location
+ */
 func (o *OutputModule) Save() error {
-	log.Printf("recieved output data: %s", o.IFile.Name)
+	log.Printf("Recieved output data: %s", o.IFile.Name)
 
 	if len(o.IFile.Name) == 0 {
 		return paramerror.ErrBadParam{Parameter: "Name", Reason: "Missing"}
 	}
+
 	//Save off received data
 	fil, err := os.Create(path.Join(o.Directory, o.IFile.Name))
 
@@ -35,6 +40,9 @@ func (o *OutputModule) Save() error {
 	return nil
 }
 
+/*
+* Setup a new output module targeted to the provided Directory
+ */
 func New(Directory string) (OutputModule, error) {
 	outModule := OutputModule{}
 	var err error = nil

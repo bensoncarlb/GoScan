@@ -1,3 +1,4 @@
+// For returning a standard more specific error type for invalid parameters
 package paramerror
 
 import "fmt"

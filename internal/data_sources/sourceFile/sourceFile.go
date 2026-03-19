@@ -1,3 +1,4 @@
+// Data Souce module from File Pickups
 package sourceFile
 
 import (
@@ -22,6 +23,9 @@ type SourceConfig struct {
 	fsWatch      *fsnotify.Watcher
 }
 
+/*
+* goroutine for handling file system events on the specified (SourceConfig.Directory) location
+ */
 func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 	log.Printf("File watcher starting up")
 	for {
@@ -32,7 +36,9 @@ func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 			}
 
 			if event.Has(fsnotify.Write) {
-				log.Println("Received notification about new file:", event.Name)
+				log.Printf("Received notification about new file: %s", event.Name)
+
+				//Give time for external file handlers to release
 				time.Sleep(time.Millisecond * 500)
 
 				f, err := os.ReadFile(event.Name)
@@ -50,7 +56,9 @@ func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 					panic(err)
 				}
 
-				resp, err := http.Post(DataEndpoint, "application/json", b) //TODO Move to channel or direct?
+				//TODO Move to channel or direct?
+				//Initially here as a HTTP call to allow for sourceFile.go to run from a separate system
+				resp, err := http.Post(DataEndpoint, "application/json", b)
 
 				if err != nil {
 					panic(err)
@@ -58,7 +66,7 @@ func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 
 				defer resp.Body.Close()
 
-				fmt.Println(resp.Status)
+				fmt.Printf(resp.Status)
 			}
 		case event, ok := <-fsWatch.Errors:
 			if !ok {
@@ -69,6 +77,9 @@ func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 	}
 }
 
+/*
+* Start the FileWatch
+ */
 func (c *SourceConfig) Start() error {
 	var err error
 	c.fsWatch, err = fsnotify.NewBufferedWatcher(30)
@@ -89,11 +100,17 @@ func (c *SourceConfig) Start() error {
 	return err
 }
 
+/*
+* Cleanly stop the FileWatcher
+ */
 func (c *SourceConfig) Stop() error {
 	c.fsWatch.Close()
 	return nil
 }
 
+/*
+* Validate and prepare a SourceConfig to file pickup
+ */
 func New(Directory string, DataEndpoint string) (SourceConfig, error) {
 	var err error
 

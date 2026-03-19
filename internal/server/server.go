@@ -1,8 +1,8 @@
+// Listening server for new documents to process
 package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -20,8 +20,11 @@ type Server struct {
 	ModOutput  *outputFile.OutputModule
 }
 
+/*
+* Setup the listening server
+ */
 func (s *Server) Setup() error {
-	log.Println("Data Server Starting up")
+	log.Printf("Data Server starting up")
 
 	//Setup a channel for processing incoming input files
 	s.ch = make(chan inputFile.InputFile)
@@ -37,6 +40,9 @@ func (s *Server) Setup() error {
 	return nil
 }
 
+/*
+* Startup the listening server
+ */
 func (s *Server) Start() error {
 	if s.isReady {
 		return nil
@@ -62,6 +68,9 @@ func (s *Server) Start() error {
 	return nil
 }
 
+/*
+* Cleanly stop the listening server
+ */
 func (s *Server) Stop() error {
 	s.isReady = false
 
@@ -71,6 +80,10 @@ func (s *Server) Stop() error {
 
 	return nil
 }
+
+/*
+* Func for goroutines to process incoming submissions to /data
+ */
 func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) {
 	ok := true
 
@@ -81,13 +94,14 @@ func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) 
 			return
 		}
 
-		log.Println("Process routine received new item for processing: ", outModule.IFile.Name)
+		log.Printf("Process routine received new item for processing: %s", outModule.IFile.Name)
 
+		// Save off the incoming data via the Output Module
 		if err := outModule.Save(); err != nil {
 			panic(err)
 		}
 
-		//"Read" the incoming item for indexing data
+		// Read and save off the document data via OCR
 		ocrData, err := ocr.ReadImage(&outModule.IFile.Data)
 
 		if err != nil {
@@ -95,14 +109,15 @@ func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) 
 		}
 
 		//Print off results
-		println(ocrData)
-
-		fmt.Println(outModule.IFile)
+		log.Printf(ocrData)
 	}
 }
 
+/*
+* func handler for /data endpoint
+ */
 func (dr *Server) data(w http.ResponseWriter, req *http.Request) {
-	log.Println("Received new request", req.RemoteAddr)
+	log.Printf("Received new request from: %s", req.RemoteAddr)
 
 	d := inputFile.InputFile{}
 	err := json.NewDecoder(req.Body).Decode(&d)
@@ -115,6 +130,9 @@ func (dr *Server) data(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+/*
+* func handler for /ping endpoint
+ */
 func (dr *Server) ping(w http.ResponseWriter, req *http.Request) {
 	if dr.isReady {
 		w.WriteHeader(http.StatusOK)
