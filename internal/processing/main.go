@@ -11,7 +11,7 @@ import (
 	"os/signal"
 
 	"github.com/bensoncb/GoScan/internal/ocr"
-	outputfile "github.com/bensoncb/GoScan/internal/outputs/file"
+	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
 	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
@@ -22,19 +22,19 @@ type server struct {
 	l          net.Listener
 }
 
-func process(ch <-chan inputFile.InputFile, outHandler func(inputFile.InputFile) error) {
+func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) {
 	for {
 		//Block waiting for new item to process
-		ifData := <-ch
+		outModule.IFile = <-ch
 
-		log.Println("Process routine received new item for processing: ", ifData.Name)
+		log.Println("Process routine received new item for processing: ", outModule.IFile.Name)
 
-		if err := outHandler(ifData); err != nil {
+		if err := outModule.Save(); err != nil {
 			panic(err)
 		}
 
 		//"Read" the incoming item for indexing data
-		ocrData, err := ocr.ReadImage(&ifData.Data)
+		ocrData, err := ocr.ReadImage(&outModule.IFile.Data)
 
 		if err != nil {
 			panic(err)
@@ -43,7 +43,7 @@ func process(ch <-chan inputFile.InputFile, outHandler func(inputFile.InputFile)
 		//Print off results
 		println(ocrData)
 
-		fmt.Println(ifData)
+		fmt.Println(outModule.IFile)
 	}
 }
 
@@ -88,18 +88,18 @@ func main() {
 
 	//Setup handler for outputing final data
 	var outputMethod string = "file" //Placeholder for switch below pending config support
-	var outHandler func(inputFile.InputFile) error
+	outputModule := outputFile.OutputModule{}
 
 	switch outputMethod {
 	case "file":
-		outHandler = outputfile.OutputFile
+		outputModule.Directory = "rcvd"
 	default:
 		panic(fmt.Errorf("unrecognized output method %s", outputMethod))
 	}
 
 	for range 1 {
 		//Kick off routine(s) to listen for new items to process
-		go process(svr.ch, outHandler)
+		go process(svr.ch, &outputModule)
 	}
 
 	var err error
