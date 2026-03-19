@@ -104,14 +104,10 @@ func New(Directory string, DataEndpoint string) (SourceConfig, error) {
 	}
 
 	if err == nil {
-		_, errFile := os.Stat(Directory)
+		_, err := os.Stat(Directory)
 
-		if errors.Is(errFile, os.ErrNotExist) {
-			errFile = os.Mkdir(Directory, os.ModePerm)
-
-			if errFile != nil {
-				err = errFile
-			}
+		if errors.Is(err, os.ErrNotExist) {
+			err = os.Mkdir(Directory, os.ModePerm)
 		}
 	}
 
