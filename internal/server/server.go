@@ -95,21 +95,19 @@ func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) 
 		}
 
 		log.Printf("Process routine received new item for processing: %s", outModule.IFile.Name)
+		// Read and save off the document data via OCR
+		_, err := ocr.ReadImage(&outModule.IFile.Data)
+		//TODO Save off data in the inputfile
+
+		if err != nil {
+			panic(err)
+		}
 
 		// Save off the incoming data via the Output Module
 		if err := outModule.Save(); err != nil {
 			panic(err)
 		}
 
-		// Read and save off the document data via OCR
-		ocrData, err := ocr.ReadImage(&outModule.IFile.Data)
-
-		if err != nil {
-			panic(err)
-		}
-
-		//Print off results
-		log.Printf(ocrData)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -58,15 +57,11 @@ func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 
 				//TODO Move to channel or direct?
 				//Initially here as a HTTP call to allow for sourceFile.go to run from a separate system
-				resp, err := http.Post(DataEndpoint, "application/json", b)
+				_, err = http.Post(DataEndpoint, "application/json", b)
 
 				if err != nil {
 					panic(err)
 				}
-
-				defer resp.Body.Close()
-
-				fmt.Printf(resp.Status)
 			}
 		case event, ok := <-fsWatch.Errors:
 			if !ok {

@@ -2,7 +2,9 @@
 package ocr
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os/exec"
 
 	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
@@ -12,7 +14,13 @@ import (
  */
 func ReadImage(i *[]byte) (string, error) {
 	//TODO implement
-	return "test", nil
+	data := base64.StdEncoding.EncodeToString(*i)
+
+	cmd := fmt.Sprintf("echo %s | base64 -d | tesseract stdin stdout", data)
+
+	res, err := exec.Command("bash", "-c", cmd).Output()
+
+	return fmt.Sprintf("%s", res), err
 }
 
 /*
