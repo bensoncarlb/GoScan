@@ -20,13 +20,19 @@ type SourceConfig struct {
 	Directory    string
 	DataEndpoint string
 	fsWatch      *fsnotify.Watcher
+	chFiles      chan string
 }
 
 /*
-* goroutine for handling file system events on the specified (SourceConfig.Directory) location
+* Monitor for new file events and filter out duplicates
+* fsnotify doesn't expose an event for file close, so there are often duplicates
+* due to the file system doing a write as multiple events.
  */
-func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
+func filewatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 	log.Printf("File watcher starting up")
+
+	seenFiles := map[string]bool{}
+
 	for {
 		select {
 		case event, ok := <-fsWatch.Events:
@@ -35,32 +41,10 @@ func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 			}
 
 			if event.Has(fsnotify.Write) {
-				log.Printf("Received notification about new file: %s", event.Name)
+				if _, exists := seenFiles[event.Name]; !exists {
+					seenFiles[event.Name] = true
 
-				//Give time for external file handlers to release
-				time.Sleep(time.Millisecond * 500)
-
-				f, err := os.ReadFile(event.Name)
-
-				if err != nil {
-					panic(err)
-				}
-
-				i := inputFile.InputFile{Size: len(f), Name: filepath.Base(event.Name), Src: "file", Data: f}
-
-				b := new(bytes.Buffer)
-
-				err = json.NewEncoder(b).Encode(i)
-				if err != nil {
-					panic(err)
-				}
-
-				//TODO Move to channel or direct?
-				//Initially here as a HTTP call to allow for sourceFile.go to run from a separate system
-				_, err = http.Post(DataEndpoint, "application/json", b)
-
-				if err != nil {
-					panic(err)
+					chEvents <- event.Name
 				}
 			}
 		case event, ok := <-fsWatch.Errors:
@@ -70,6 +54,46 @@ func filewatcher(fsWatch *fsnotify.Watcher, DataEndpoint string) {
 			panic(event.Error())
 		}
 	}
+}
+
+/*
+* goroutine for handling new files on the specified (SourceConfig.Directory) location
+ */
+func fileevents(chFiles chan string, DataEndpoint string) {
+	file, ok := <-chFiles
+
+	if !ok {
+		return
+	}
+
+	log.Printf("Received notification about new file: %s", file)
+
+	//Give time for external file handlers to release
+	time.Sleep(time.Millisecond * 500)
+
+	f, err := os.ReadFile(file)
+
+	if err != nil {
+		panic(err)
+	}
+
+	i := inputFile.InputFile{Size: len(f), Name: filepath.Base(file), Src: "file", Data: f}
+
+	b := new(bytes.Buffer)
+
+	err = json.NewEncoder(b).Encode(i)
+	if err != nil {
+		panic(err)
+	}
+
+	//TODO Move to channel or direct?
+	//Initially here as a HTTP call to allow for sourceFile.go to run from a separate system
+	_, err = http.Post(DataEndpoint, "application/json", b)
+
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 /*
@@ -87,9 +111,13 @@ func (c *SourceConfig) Start() error {
 		return err
 	}
 
+	c.chFiles = make(chan string, 50)
+
+	go filewatch(c.fsWatch, c.chFiles)
+
 	//Spawn worker
 	for range 1 {
-		go filewatcher(c.fsWatch, c.DataEndpoint)
+		go fileevents(c.chFiles, c.DataEndpoint)
 	}
 
 	return err
@@ -100,6 +128,7 @@ func (c *SourceConfig) Start() error {
  */
 func (c *SourceConfig) Stop() error {
 	c.fsWatch.Close()
+	close(c.chFiles)
 	return nil
 }
 
