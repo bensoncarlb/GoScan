@@ -14,6 +14,7 @@ import (
 	paramerror "github.com/bensoncb/GoScan/internal/errors"
 	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 	"github.com/fsnotify/fsnotify"
+	"github.com/rflandau/expiring"
 )
 
 type SourceConfig struct {
@@ -30,8 +31,8 @@ type SourceConfig struct {
  */
 func filewatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 	log.Printf("File watcher starting up")
-
-	seenFiles := map[string]bool{}
+	seenFiles := expiring.NewTable[string, bool]()
+	timeout := time.Second * 5
 
 	for {
 		select {
@@ -40,11 +41,13 @@ func filewatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 				return
 			}
 
+			//Record seen files for a peroid of {timeout}
+			//after not seeing the file for that period of time send it to the chan to be processed
 			if event.Has(fsnotify.Write) {
-				if _, exists := seenFiles[event.Name]; !exists {
-					seenFiles[event.Name] = true
-
-					chEvents <- event.Name
+				if _, found := seenFiles.Load(event.Name); !found {
+					seenFiles.Store(event.Name, true, timeout, func(file string, _ bool) { chEvents <- file })
+				} else {
+					seenFiles.Refresh(event.Name, timeout)
 				}
 			}
 		case event, ok := <-fsWatch.Errors:
@@ -60,40 +63,41 @@ func filewatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 * goroutine for handling new files on the specified (SourceConfig.Directory) location
  */
 func fileevents(chFiles chan string, DataEndpoint string) {
-	file, ok := <-chFiles
+	for {
+		file, ok := <-chFiles
 
-	if !ok {
-		return
+		if !ok {
+			return
+		}
+
+		log.Printf("Received notification about new file: %s", file)
+
+		//Give time for external file handlers to release
+		time.Sleep(time.Millisecond * 500)
+
+		f, err := os.ReadFile(file)
+
+		if err != nil {
+			panic(err)
+		}
+
+		i := inputFile.InputFile{Size: len(f), Name: filepath.Base(file), Src: "file", Data: f}
+
+		b := new(bytes.Buffer)
+
+		err = json.NewEncoder(b).Encode(i)
+		if err != nil {
+			panic(err)
+		}
+
+		//TODO Move to channel or direct?
+		//Initially here as a HTTP call to allow for sourceFile.go to run from a separate system
+		_, err = http.Post(DataEndpoint, "application/json", b)
+
+		if err != nil {
+			panic(err)
+		}
 	}
-
-	log.Printf("Received notification about new file: %s", file)
-
-	//Give time for external file handlers to release
-	time.Sleep(time.Millisecond * 500)
-
-	f, err := os.ReadFile(file)
-
-	if err != nil {
-		panic(err)
-	}
-
-	i := inputFile.InputFile{Size: len(f), Name: filepath.Base(file), Src: "file", Data: f}
-
-	b := new(bytes.Buffer)
-
-	err = json.NewEncoder(b).Encode(i)
-	if err != nil {
-		panic(err)
-	}
-
-	//TODO Move to channel or direct?
-	//Initially here as a HTTP call to allow for sourceFile.go to run from a separate system
-	_, err = http.Post(DataEndpoint, "application/json", b)
-
-	if err != nil {
-		panic(err)
-	}
-
 }
 
 /*
