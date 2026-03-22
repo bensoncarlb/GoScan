@@ -2,27 +2,23 @@
 package inputFile
 
 import (
+	"image"
+
 	paramerror "github.com/bensoncb/GoScan/internal/errors"
 )
 
 // InputFile is a metadata representation of a dcument that has been ingested.
 type InputFile struct {
-	Size    int    `json:"size"`
-	Name    string `json:"name"`
-	Src     string `json:"src"`
-	Data    []byte `json:"data"`
+	Size    int               `json:"size"`
+	Name    string            `json:"name"`
+	Src     string            `json:"src"`
+	ImgData []byte            `json:"data"`
+	OCRData map[string]string `json:"ocr_data"`
 	SizeX   int32
 	SizeY   int32
 	DocType string // TODO enumerate this
 	State   string // TODO enumerate this
-	//Regions []Region
-}
-
-type Region struct {
-	StartX int32
-	StartY int32
-	EndX   int32
-	EndY   int32
+	Regions map[string]image.Rectangle
 }
 
 /*
@@ -42,7 +38,7 @@ func New(Size int, Name string, Data []byte) (InputFile, error) {
 
 	iFile.Size = Size
 	iFile.Name = Name
-	iFile.Data = Data
+	iFile.ImgData = Data
 
 	return iFile, err
 }

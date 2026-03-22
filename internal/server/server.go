@@ -2,7 +2,9 @@
 package server
 
 import (
+	_ "bytes"
 	"encoding/json"
+	_ "image"
 	"log"
 	"net"
 	"net/http"
@@ -95,9 +97,47 @@ func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) 
 		}
 
 		log.Printf("Process routine received new item for processing: %s", outModule.IFile.Name)
+
+		//TODO Check DecodeConfig
+		var err error
+		/*_, _, err := image.Decode(bytes.NewReader(outModule.IFile.ImgData))
+
+		if err != nil {
+			log.Fatalf("Failed reading image: %s", err)
+		}
+		*/
+		/*
+			buf := new(bytes.Buffer)
+			_ = png.Encode(buf, imgBase)
+			b := buf.Bytes()
+		*/
+
 		// Read and save off the document data via OCR
-		_, err := ocr.ReadImage(&outModule.IFile.Data)
-		//TODO Save off data in the inputfile
+		if len(outModule.IFile.Regions) > 0 {
+			/*for field, reg := range outModule.IFile.Regions {
+				buf := new(bytes.Buffer)
+
+				err := png.Encode(buf, img.SubImage(reg))
+
+				if err != nil {
+					log.Fatalf("Failed to read image region %v for image %s", reg, outModule.IFile.Name)
+				}
+
+				regImgData := buf.Bytes()
+
+				outModule.IFile.OCRData[field], err = ocr.ReadRegion(&regImgData)
+
+				if err != nil {
+					log.Fatalf("Failed to read image region %v for image %s", reg, outModule.IFile.Name)
+				}
+			}*/
+		} else {
+			outModule.IFile.OCRData["data"], err = ocr.ReadRegion(&outModule.IFile.ImgData)
+
+			if err != nil {
+				log.Fatalf("Failed to read data for %s", outModule.IFile.Name)
+			}
+		}
 
 		if err != nil {
 			panic(err)
@@ -119,6 +159,8 @@ func (dr *Server) data(w http.ResponseWriter, req *http.Request) {
 
 	d := inputFile.InputFile{}
 	err := json.NewDecoder(req.Body).Decode(&d)
+
+	d.OCRData = make(map[string]string)
 
 	if err != nil {
 		panic(err)

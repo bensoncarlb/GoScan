@@ -23,7 +23,7 @@ func TestValid(t *testing.T) {
 		t.Fatalf("Form Identify failed: %s", err)
 	}
 
-	res, err := ocr.ReadImage(&iFile.Data)
+	res, err := ocr.ReadRegion(&iFile.ImgData)
 
 	if err != nil {
 		t.Fatalf("Error during data read: %s", err)

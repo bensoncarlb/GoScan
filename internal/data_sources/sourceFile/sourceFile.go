@@ -81,7 +81,7 @@ func fileevents(chFiles chan string, DataEndpoint string) {
 			panic(err)
 		}
 
-		i := inputFile.InputFile{Size: len(f), Name: filepath.Base(file), Src: "file", Data: f}
+		i := inputFile.InputFile{Size: len(f), Name: filepath.Base(file), Src: "file", ImgData: f}
 
 		b := new(bytes.Buffer)
 

@@ -2,6 +2,7 @@
 package outputFile
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"os"
@@ -35,7 +36,27 @@ func (o *OutputModule) Save() error {
 
 	defer fil.Close()
 
-	fil.Write(o.IFile.Data)
+	fil.Write(o.IFile.ImgData)
+
+	fil, err = os.Create(path.Join(o.Directory, o.IFile.Name+".txt"))
+
+	if err != nil {
+		return err
+	}
+
+	defer fil.Close()
+
+	data, err := json.Marshal(o.IFile)
+
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = fil.Write(data)
+
+	if err != nil {
+		panic(err)
+	}
 
 	return nil
 }
