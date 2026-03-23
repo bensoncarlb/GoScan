@@ -38,6 +38,10 @@ func TestInit(t *testing.T) {
 
 	fil, err := os.Create(path.Join(InDir, "TestInit"))
 
+	if err != nil {
+		t.Fatalf("Failed to create test dir: %s", err)
+	}
+
 	fil.Write([]byte("TestInit"))
 	fil.Close()
 
@@ -65,7 +69,7 @@ func StartServer(OutDir string) *server.Server {
 	//Setup listening server
 	svr := server.Server{ModOutput: &ModOutput}
 
-	if err := svr.Setup(); err != nil {
+	if err := svr.New(); err != nil {
 		panic(err)
 	}
 

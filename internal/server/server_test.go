@@ -10,7 +10,7 @@ import (
 func TestPing(t *testing.T) {
 	svr := server.Server{}
 
-	err := svr.Setup()
+	err := svr.New()
 
 	if err != nil {
 		t.Fatalf("Setup failed: %s", err)

@@ -1,5 +1,5 @@
 // For returning a standard more specific error type for invalid parameters
-package paramerror
+package gserrors
 
 import "fmt"
 

@@ -7,44 +7,50 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 
-	paramerror "github.com/bensoncb/GoScan/internal/errors"
-	"github.com/bensoncb/GoScan/internal/structs/inputFile"
+	"github.com/bensoncb/GoScan/internal/gsRecord"
+	"github.com/bensoncb/GoScan/internal/gserrors"
 )
 
 type OutputModule struct {
 	Directory string
-	IFile     inputFile.InputFile
+	IFile     gsRecord.RecordData
 }
 
-/*
-* Take the provided OutputModule.IFile and save the data to a file location
- */
+// Take the provided OutputModule.IFile and save the data to a file location
 func (o *OutputModule) Save() error {
 	log.Printf("Recieved output data: %s", o.IFile.Name)
 
-	if len(o.IFile.Name) == 0 {
-		return paramerror.ErrBadParam{Parameter: "Name", Reason: "Missing"}
+	if strings.TrimSpace(o.IFile.Name) == "" {
+		//TODO enumerate reasons
+		return gserrors.ErrBadParam{Parameter: "Name", Reason: "Missing"}
 	}
 
 	//Save off received data
-	fil, err := os.Create(path.Join(o.Directory, o.IFile.Name))
+	filImg, err := os.Create(path.Join(o.Directory, o.IFile.Name))
 
 	if err != nil {
 		return err
 	}
 
-	defer fil.Close()
+	defer filImg.Close()
 
-	fil.Write(o.IFile.ImgData)
-
-	fil, err = os.Create(path.Join(o.Directory, o.IFile.Name+".txt"))
+	n, err := filImg.Write(o.IFile.ImgData)
 
 	if err != nil {
 		return err
 	}
 
-	defer fil.Close()
+	log.Printf("Wrote image file containing %d bytes", n)
+
+	filData, err := os.Create(path.Join(o.Directory, o.IFile.Name+".txt"))
+
+	if err != nil {
+		return err
+	}
+
+	defer filData.Close()
 
 	data, err := json.Marshal(o.IFile)
 
@@ -52,41 +58,38 @@ func (o *OutputModule) Save() error {
 		panic(err)
 	}
 
-	_, err = fil.Write(data)
+	n, err = filData.Write(data)
 
 	if err != nil {
 		panic(err)
 	}
 
+	log.Printf("Wrote ocr data file containing %d bytes", n)
+
 	return nil
 }
 
-/*
-* Setup a new output module targeted to the provided Directory
- */
+// Setup a new output module targeted to the provided Directory
 func New(Directory string) (OutputModule, error) {
-	outModule := OutputModule{}
-	var err error = nil
-
-	if len(Directory) == 0 {
-		err = paramerror.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
+	if strings.TrimSpace(Directory) == "" {
+		return OutputModule{}, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
 	}
 
-	outModule.Directory = Directory
-
-	if err != nil {
-		return outModule, err
-	}
+	outModule := OutputModule{Directory: Directory}
 
 	//Check the directory to store received data in exists
 	fi, err := os.Stat(Directory)
 
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			err = os.Mkdir(Directory, os.ModePerm)
+			err = os.MkdirAll(Directory, os.ModePerm)
+		}
+
+		if err != nil {
+			return OutputModule{}, err
 		}
 	} else if !fi.IsDir() {
-		err = paramerror.ErrBadParam{Parameter: "Directory", Reason: "Directory is a File"}
+		return OutputModule{}, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Directory is a File"}
 	}
 
 	return outModule, err

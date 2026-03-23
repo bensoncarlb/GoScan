@@ -9,31 +9,40 @@ import (
 	"log"
 	"os/exec"
 
-	"github.com/bensoncb/GoScan/internal/structs/inputFile"
+	"github.com/bensoncb/GoScan/internal/gsRecord"
 )
 
+func init() {
+	//TODO check tesseract
+}
+
 // For a provided item, read and return the OCR'd data
-func ReadRegion(i *[]byte) (string, error) {
-	data := base64.StdEncoding.EncodeToString(*i)
+func ReadRegion(i []byte) (string, error) {
+	data := base64.StdEncoding.EncodeToString(i)
 
 	cmd := fmt.Sprintf("echo %s | base64 -d | tesseract stdin stdout", data)
 
 	res, err := exec.Command("bash", "-c", cmd).Output()
 
-	return fmt.Sprintf("%s", res), err
+	if err != nil {
+		return "", err
+	}
+
+	return string(res), nil
 }
 
 /*
 * Attempt to identify the provided image
  */
-func FormIdentify(d *inputFile.InputFile) error {
+func FormIdentify(d *gsRecord.RecordData) error {
 	//TODO implement
 	if d.DocType != "" {
-		return fmt.Errorf("Document already identified as %v", d.DocType)
+		return fmt.Errorf("document already identified as %v", d.DocType)
 	}
 
 	if len(d.ImgData) == 0 {
-		return fmt.Errorf("No data provided")
+		return nil
+		//return errors.New("No image data")
 	}
 
 	d.DocType = "Test"

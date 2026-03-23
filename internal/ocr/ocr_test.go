@@ -3,15 +3,15 @@ package ocr_test
 import (
 	"testing"
 
+	"github.com/bensoncb/GoScan/internal/gsRecord"
 	"github.com/bensoncb/GoScan/internal/ocr"
-	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
 /*
 * Check a basic valid case
  */
 func TestValid(t *testing.T) {
-	iFile, err := inputFile.New(1, "test", []byte("test"))
+	iFile, err := gsRecord.New(1, "test", "file", []byte("test"))
 
 	if err != nil {
 		t.Fatalf("Failed to setup inputFile: %s", err)
@@ -23,7 +23,7 @@ func TestValid(t *testing.T) {
 		t.Fatalf("Form Identify failed: %s", err)
 	}
 
-	res, err := ocr.ReadRegion(&iFile.ImgData)
+	res, err := ocr.ReadRegion(iFile.ImgData)
 
 	if err != nil {
 		t.Fatalf("Error during data read: %s", err)

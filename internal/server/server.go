@@ -9,32 +9,29 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/bensoncb/GoScan/internal/gsRecord"
 	"github.com/bensoncb/GoScan/internal/ocr"
 	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
-	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
 type Server struct {
-	ch         chan inputFile.InputFile
+	ch         chan gsRecord.RecordData
 	isReady    bool
 	httpServer http.Server
 	l          net.Listener
 	ModOutput  *outputFile.OutputModule
 }
 
-/*
-* Setup the listening server
- */
-func (s *Server) Setup() error {
-	log.Printf("Data Server starting up")
-
+// Setup the listening server
+func (s *Server) New() error {
 	//Setup a channel for processing incoming input files
-	s.ch = make(chan inputFile.InputFile)
+	//TODO configurable
+	s.ch = make(chan gsRecord.RecordData, 50)
 
 	s.httpServer = http.Server{}
 	sm := http.NewServeMux()
 
-	sm.HandleFunc("/data", s.data)
+	sm.HandleFunc("/data", s.receiveData)
 	sm.HandleFunc("/ping", s.ping)
 
 	s.httpServer.Handler = sm
@@ -42,22 +39,23 @@ func (s *Server) Setup() error {
 	return nil
 }
 
-/*
-* Startup the listening server
- */
+// Startup the listening server
 func (s *Server) Start() error {
+	log.Printf("Data Server starting up")
+
 	if s.isReady {
 		return nil
 	}
 
 	var err error
 
-	s.l, err = net.Listen("tcp", ":8090") //TODO Port assignment
+	s.l, err = net.Listen("tcp", ":8090") //TODO configurable port
 
 	if err != nil {
 		panic(err)
 	}
 
+	//TODO configurable
 	for range 1 {
 		//Kick off routine(s) to listen for new items to process
 		go process(s.ch, s.ModOutput)
@@ -70,23 +68,28 @@ func (s *Server) Start() error {
 	return nil
 }
 
-/*
-* Cleanly stop the listening server
- */
+//TODO stop vs terminate
+
+// Cleanly stop the listening server
 func (s *Server) Stop() error {
 	s.isReady = false
 
-	s.l.Close()
+	if s.l != nil {
+		s.l.Close()
+	}
+
 	s.httpServer.Close()
-	close(s.ch)
+
+	if s.ch != nil {
+		close(s.ch)
+		s.ch = nil
+	}
 
 	return nil
 }
 
-/*
-* Func for goroutines to process incoming submissions to /data
- */
-func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) {
+// Func for goroutines to process incoming submissions to /data
+func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule) {
 	ok := true
 
 	for {
@@ -132,7 +135,9 @@ func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) 
 				}
 			}*/
 		} else {
-			outModule.IFile.OCRData["data"], err = ocr.ReadRegion(&outModule.IFile.ImgData)
+			//If no regions are defined, read the entire image as a single field
+			//TODO configurable
+			outModule.IFile.OCRData["data"], err = ocr.ReadRegion(outModule.IFile.ImgData)
 
 			if err != nil {
 				log.Fatalf("Failed to read data for %s", outModule.IFile.Name)
@@ -151,16 +156,12 @@ func process(ch <-chan inputFile.InputFile, outModule *outputFile.OutputModule) 
 	}
 }
 
-/*
-* func handler for /data endpoint
- */
-func (dr *Server) data(w http.ResponseWriter, req *http.Request) {
+// func handler for /data endpoint
+func (dr *Server) receiveData(w http.ResponseWriter, req *http.Request) {
 	log.Printf("Received new request from: %s", req.RemoteAddr)
 
-	d := inputFile.InputFile{}
+	d := gsRecord.RecordData{OCRData: make(map[string]string)}
 	err := json.NewDecoder(req.Body).Decode(&d)
-
-	d.OCRData = make(map[string]string)
 
 	if err != nil {
 		panic(err)
@@ -170,9 +171,7 @@ func (dr *Server) data(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-/*
-* func handler for /ping endpoint
- */
+// func handler for /ping endpoint
 func (dr *Server) ping(w http.ResponseWriter, req *http.Request) {
 	if dr.isReady {
 		w.WriteHeader(http.StatusOK)

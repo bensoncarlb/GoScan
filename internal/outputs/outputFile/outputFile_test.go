@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/bensoncb/GoScan/internal/gsRecord"
 	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
-	"github.com/bensoncb/GoScan/internal/structs/inputFile"
 )
 
 /*
@@ -23,7 +23,7 @@ func TestGoodOutput(t *testing.T) {
 		t.Fatalf("Failed module setup: %s", err)
 	}
 
-	OutputModule.IFile, err = inputFile.New(1, TestFile, TestData)
+	OutputModule.IFile, err = gsRecord.New(1, TestFile, "file", TestData)
 
 	if err != nil {
 		t.Fatalf("Failed to setup test file: %s", err)

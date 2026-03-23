@@ -1,17 +1,17 @@
-package inputFile_test
+package gsRecord_test
 
 import (
 	"errors"
 	"testing"
 
-	paramerror "github.com/bensoncb/GoScan/internal/errors"
-	"github.com/bensoncb/GoScan/internal/structs/inputFile"
+	"github.com/bensoncb/GoScan/internal/gsRecord"
+	"github.com/bensoncb/GoScan/internal/gserrors"
 )
 
 func TestBaseGood(t *testing.T) {
 	data := []byte("test")
 
-	_, err := inputFile.New(1, "test", data)
+	_, err := gsRecord.New(1, "test", "file", data)
 
 	if err != nil {
 		t.Fatalf("Test failed with error: %s", err)
@@ -21,11 +21,11 @@ func TestBaseGood(t *testing.T) {
 func TestBadArgs(t *testing.T) {
 	data := []byte("test")
 	name := "test"
-	iFile, err := inputFile.New(0, name, data)
+	iFile, err := gsRecord.New(0, name, "file", data)
 
 	if err == nil {
 		t.Fatalf("Missing Size not detected.")
-	} else if !errors.Is(err, paramerror.ErrBadParam{}) {
+	} else if !errors.Is(err, gserrors.ErrBadParam{}) {
 		t.Fatalf("Unexpected error returned: %s", err)
 	} else if iFile.Name != name {
 		t.Fatalf("Setting Name property failed. Acutal: %s, Expected: %s", iFile.Name, name)

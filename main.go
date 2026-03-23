@@ -13,7 +13,7 @@ import (
 
 func main() {
 	//Setup handler for outputing final data
-	//TODO Take as flags and/or config file
+	//TODO configurable
 	var outputMethod string = "file" //Placeholder for switch below pending config support
 	var outputDir string = "/home/carl/GoScan/rcvd"
 	var inputDir string = "/home/carl/GoScan/test"
@@ -21,7 +21,7 @@ func main() {
 	/***
 	* Setup the output module to be passed to the server.go process
 	***/
-	ModOutput, err := outputFile.New(outputDir)
+	modOutput, err := outputFile.New(outputDir)
 
 	if err != nil {
 		panic(err)
@@ -29,17 +29,17 @@ func main() {
 
 	switch outputMethod {
 	case "file":
-		//TODO
+		//TODO Something with output method
 	default:
-		panic(fmt.Errorf("Unrecognized output method %s", outputMethod))
+		panic(fmt.Errorf("unrecognized output method %s", outputMethod))
 	}
 
 	/***
 	* Setup listening server
 	***/
-	svr := server.Server{ModOutput: &ModOutput}
+	svr := server.Server{ModOutput: &modOutput}
 
-	err = svr.Setup()
+	err = svr.New()
 	if err != nil {
 		panic(err)
 	}
@@ -55,20 +55,20 @@ func main() {
 	/***
 	* Setup the data source listener module
 	***/
-	DataInput, err := sourceFile.New(inputDir, "http://localhost:8090/data") //TODO take in the endpoint
+	dataInput, err := sourceFile.New(inputDir, "http://localhost:8090/data") //TODO configurable
 
 	if err != nil {
 		panic(err)
 	}
 
 	//Start the data source listener
-	err = DataInput.Start()
+	err = dataInput.Start()
 
 	if err != nil {
 		panic(err)
 	}
 
-	defer DataInput.Stop()
+	defer dataInput.Stop()
 
 	/***
 	* Wait for kill signal
