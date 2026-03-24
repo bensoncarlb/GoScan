@@ -2,6 +2,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"image"
 	"log"
@@ -35,10 +36,10 @@ func (s *Server) New() error {
 
 	sm.HandleFunc("/data", s.receiveData)
 	sm.HandleFunc("/ping", s.ping)
-	//TODO Add Document Type
-	//TODO List Document Types
-	//TODO Delete Document Type
-	//TODO list Images (new func on Output Module)
+	sm.HandleFunc("/getitems", s.getItems)
+	sm.HandleFunc("/getdoctypes", s.getDocTypes)
+	sm.HandleFunc("/adddoctype", s.addDocType)
+	sm.HandleFunc("/deletedoctype", s.deleteDocType)
 
 	s.httpServer.Handler = sm
 
@@ -173,4 +174,34 @@ func (dr *Server) ping(w http.ResponseWriter, req *http.Request) {
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func (s *Server) getItems(w http.ResponseWriter, req *http.Request) {
+	items, err := s.ModOutput.List()
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
+
+	b := bytes.Buffer{}
+
+	err = json.NewEncoder(&b).Encode(items)
+	if err != nil {
+		panic(err)
+	}
+
+	w.Write(b.Bytes())
+}
+
+func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
+
+}
+
+func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
+
+}
+
+func (s *Server) addDocType(w http.ResponseWriter, req *http.Request) {
+
 }

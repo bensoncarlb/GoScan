@@ -4,6 +4,7 @@ package outputFile
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path"
@@ -93,4 +94,27 @@ func New(Directory string) (OutputModule, error) {
 	}
 
 	return outModule, err
+}
+
+func (o *OutputModule) List() ([]string, error) {
+	if strings.TrimSpace(o.Directory) == "" {
+		return nil, errors.New("no output Directory configured")
+	}
+
+	dir, err := os.ReadDir(o.Directory)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to open output directory %s", o.Directory)
+	}
+
+	dirFiles := make([]string, len(dir))
+	i := 0
+	for _, dirEntry := range dir {
+		if !dirEntry.IsDir() {
+			dirFiles[i] = dirEntry.Name()
+			i += 1
+		}
+	}
+
+	return dirFiles, nil
 }
