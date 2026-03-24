@@ -35,6 +35,10 @@ func (s *Server) New() error {
 
 	sm.HandleFunc("/data", s.receiveData)
 	sm.HandleFunc("/ping", s.ping)
+	//TODO Add Document Type
+	//TODO List Document Types
+	//TODO Delete Document Type
+	//TODO list Images (new func on Output Module)
 
 	s.httpServer.Handler = sm
 
