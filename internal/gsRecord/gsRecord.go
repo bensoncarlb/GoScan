@@ -3,7 +3,6 @@
 package gsRecord
 
 import (
-	"image"
 	"strings"
 
 	"github.com/bensoncb/GoScan/internal/gserrors"
@@ -16,10 +15,7 @@ type RecordData struct {
 	Src     string            `json:"src"`
 	ImgData []byte            `json:"data"`
 	OCRData map[string]string `json:"ocr_data"`
-	SizeX   int32
-	SizeY   int32
-	DocType string
-	Regions map[string]image.Rectangle
+	DocType string            `json:"document_type"`
 }
 
 // Setup a new RecordData for a document

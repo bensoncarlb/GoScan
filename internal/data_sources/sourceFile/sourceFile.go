@@ -69,7 +69,12 @@ func fileWatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 * goroutine for handling new files on the specified (SourceConfig.Directory) location
  */
 func fileEvents(chFiles <-chan string, DataEndpoint string) {
-	for file, ok := <-chFiles; ok; {
+	for {
+		file, ok := <-chFiles
+
+		if !ok {
+			return
+		}
 		log.Printf("Received notification about new file: %s", file)
 
 		f, err := os.ReadFile(file)

@@ -2,24 +2,26 @@
 package server
 
 import (
-	_ "bytes"
 	"encoding/json"
-	_ "image"
+	"image"
 	"log"
 	"net"
 	"net/http"
 
+	"github.com/bensoncb/GoScan/internal/documentType"
 	"github.com/bensoncb/GoScan/internal/gsRecord"
 	"github.com/bensoncb/GoScan/internal/ocr"
 	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
 )
 
 type Server struct {
-	ch         chan gsRecord.RecordData
-	isReady    bool
-	httpServer http.Server
-	l          net.Listener
-	ModOutput  *outputFile.OutputModule
+	ch                  chan gsRecord.RecordData
+	isReady             bool
+	httpServer          http.Server
+	l                   net.Listener
+	ModOutput           *outputFile.OutputModule
+	DocumentTypes       map[string]documentType.DocumentType
+	DocIdentifierRegion image.Rectangle
 }
 
 // Setup the listening server
@@ -58,7 +60,7 @@ func (s *Server) Start() error {
 	//TODO configurable
 	for range 1 {
 		//Kick off routine(s) to listen for new items to process
-		go process(s.ch, s.ModOutput)
+		go process(s.ch, s.ModOutput, s.DocIdentifierRegion, s.DocumentTypes)
 	}
 
 	go s.httpServer.Serve(s.l)
@@ -89,55 +91,43 @@ func (s *Server) Stop() error {
 }
 
 // Func for goroutines to process incoming submissions to /data
-func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule) {
-	ok := true
-
-	for {
-		//Block waiting for new item to process
-		outModule.IFile, ok = <-ch
-		if !ok {
-			return
-		}
-
+func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, docTypeRegion image.Rectangle, documentTypes map[string]documentType.DocumentType) {
+	//Waiting for new item to process
+	//TODO handle concurrency
+	for outModule.IFile = range ch {
 		log.Printf("Process routine received new item for processing: %s", outModule.IFile.Name)
 
-		//TODO Check DecodeConfig
-		var err error
-		/*_, _, err := image.Decode(bytes.NewReader(outModule.IFile.ImgData))
+		img := ocr.ConvertToGray(outModule.IFile.ImgData)
+
+		docIdentifier, err := ocr.ReadRegion(img, docTypeRegion)
 
 		if err != nil {
-			log.Fatalf("Failed reading image: %s", err)
+			log.Fatalf("Failed to get Document Type: %s", err)
 		}
-		*/
-		/*
-			buf := new(bytes.Buffer)
-			_ = png.Encode(buf, imgBase)
-			b := buf.Bytes()
-		*/
+
+		docType, found := documentTypes[docIdentifier]
+
+		if found {
+			outModule.IFile.DocType = docType.Title
+		} else {
+			//TODO configurable
+			outModule.IFile.DocType = "Default"
+		}
 
 		// Read and save off the document data via OCR
-		if len(outModule.IFile.Regions) > 0 {
-			/*for field, reg := range outModule.IFile.Regions {
-				buf := new(bytes.Buffer)
+		if found && len(docType.Regions) > 0 {
+			for _, docRegions := range docType.Regions {
 
-				err := png.Encode(buf, img.SubImage(reg))
-
-				if err != nil {
-					log.Fatalf("Failed to read image region %v for image %s", reg, outModule.IFile.Name)
-				}
-
-				regImgData := buf.Bytes()
-
-				outModule.IFile.OCRData[field], err = ocr.ReadRegion(&regImgData)
+				outModule.IFile.OCRData[docRegions.FieldName], err = ocr.ReadRegion(img, docRegions.Region)
 
 				if err != nil {
-					log.Fatalf("Failed to read image region %v for image %s", reg, outModule.IFile.Name)
+					log.Fatalf("Failed to read image region %v for image %s", docRegions.RegionTitle, outModule.IFile.Name)
 				}
-			}*/
+			}
 		} else {
 			//If no regions are defined, read the entire image as a single field
 			//TODO configurable
-			outModule.IFile.OCRData["data"], err = ocr.ReadRegion(outModule.IFile.ImgData)
+			outModule.IFile.OCRData["data"], err = ocr.ReadRegion(img, img.Bounds())
 
 			if err != nil {
 				log.Fatalf("Failed to read data for %s", outModule.IFile.Name)
@@ -152,7 +142,6 @@ func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule) 
 		if err := outModule.Save(); err != nil {
 			panic(err)
 		}
-
 	}
 }
 
@@ -160,12 +149,14 @@ func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule) 
 func (dr *Server) receiveData(w http.ResponseWriter, req *http.Request) {
 	log.Printf("Received new request from: %s", req.RemoteAddr)
 
-	d := gsRecord.RecordData{OCRData: make(map[string]string)}
+	d := gsRecord.RecordData{}
 	err := json.NewDecoder(req.Body).Decode(&d)
 
 	if err != nil {
 		panic(err)
 	}
+
+	d.OCRData = map[string]string{}
 
 	dr.ch <- d
 	w.WriteHeader(http.StatusAccepted)
