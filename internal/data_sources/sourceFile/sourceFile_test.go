@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bensoncb/GoScan/internal/data_sources/sourceFile"
-	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
-	"github.com/bensoncb/GoScan/internal/server"
+	"github.com/bensoncarlb/GoScan/internal/data_sources/sourceFile"
+	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/server"
 )
 
 /*

@@ -5,7 +5,7 @@ package gsRecord
 import (
 	"strings"
 
-	"github.com/bensoncb/GoScan/internal/gserrors"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
 )
 
 // RecordData is a metadata representation of a dcument that has been ingested.

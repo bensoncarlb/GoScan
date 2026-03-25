@@ -10,8 +10,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/bensoncb/GoScan/internal/gsRecord"
-	"github.com/bensoncb/GoScan/internal/gserrors"
+	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
 )
 
 type OutputModule struct {

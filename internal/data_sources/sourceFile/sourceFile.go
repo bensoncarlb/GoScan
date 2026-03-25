@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bensoncb/GoScan/internal/gsRecord"
-	"github.com/bensoncb/GoScan/internal/gserrors"
+	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
 	"github.com/fsnotify/fsnotify"
 	"github.com/rflandau/expiring"
 )

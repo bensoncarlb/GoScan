@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bensoncb/GoScan/internal/gsRecord"
-	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
 )
 
 /*

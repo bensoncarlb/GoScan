@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bensoncb/GoScan/internal/documentType"
-	"github.com/bensoncb/GoScan/internal/gsRecord"
-	"github.com/bensoncb/GoScan/internal/ocr"
-	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/documentType"
+	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/ocr"
+	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
 )
 
 type Server struct {
