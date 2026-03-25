@@ -53,7 +53,11 @@ func main() {
 	// Setup listening server
 	//
 	//TODO setup identifier region
-	svr := server.Server{ModOutput: &modOutput, DocumentTypes: docTypes, DocIdentifierRegion: image.Rect(0, 0, 1, 1)}
+	svr := server.Server{
+		ModOutput:           &modOutput,
+		DocumentTypes:       docTypes,
+		DocIdentifierRegion: image.Rect(0, 0, 1, 1),
+		DocumentLocation:    docTypeDir}
 
 	err = svr.New()
 	if err != nil {

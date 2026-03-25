@@ -5,9 +5,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"image"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bensoncb/GoScan/internal/documentType"
 	"github.com/bensoncb/GoScan/internal/gsRecord"
@@ -22,6 +26,7 @@ type Server struct {
 	l                   net.Listener
 	ModOutput           *outputFile.OutputModule
 	DocumentTypes       map[string]documentType.DocumentType
+	DocumentLocation    string
 	DocIdentifierRegion image.Rectangle
 }
 
@@ -37,6 +42,7 @@ func (s *Server) New() error {
 	sm.HandleFunc("/data", s.receiveData)
 	sm.HandleFunc("/ping", s.ping)
 	sm.HandleFunc("/getitems", s.getItems)
+	sm.HandleFunc("/retrieveitem", s.retrieveItem)
 	sm.HandleFunc("/getdoctypes", s.getDocTypes)
 	sm.HandleFunc("/adddoctype", s.addDocType)
 	sm.HandleFunc("/deletedoctype", s.deleteDocType)
@@ -180,7 +186,7 @@ func (s *Server) getItems(w http.ResponseWriter, req *http.Request) {
 	items, err := s.ModOutput.List()
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 	}
 
@@ -189,19 +195,96 @@ func (s *Server) getItems(w http.ResponseWriter, req *http.Request) {
 	err = json.NewEncoder(&b).Encode(items)
 	if err != nil {
 		panic(err)
+		//TODO better handling
 	}
 
 	w.Write(b.Bytes())
 }
 
-func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
+func (s *Server) retrieveItem(w http.ResponseWriter, req *http.Request) {
 
+}
+
+func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
+	docTypes := make([]string, len(s.DocumentTypes))
+
+	i := 0
+	for _, doc := range s.DocumentTypes {
+		docTypes[i] = doc.Title
+
+		i += 1
+	}
+
+	b := bytes.Buffer{}
+
+	if err := json.NewEncoder(&b).Encode(docTypes); err != nil {
+		panic(err)
+		//TODO better handling
+	}
+
+	w.Write(b.Bytes())
 }
 
 func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
+	d := bytes.NewBuffer
+	err := json.NewDecoder(req.Body).Decode(&d)
 
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	//TODO sort out parsing the incoming request
+	if docType, ok := s.DocumentTypes[""]; !ok {
+		w.WriteHeader(http.StatusBadRequest)
+	} else {
+		delete(s.DocumentTypes, docType.Title)
+		os.Remove(docType.Identifier)
+
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 func (s *Server) addDocType(w http.ResponseWriter, req *http.Request) {
+	d := documentType.DocumentType{}
+	err := json.NewDecoder(req.Body).Decode(&d)
 
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	} else if !d.IsValid() {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	} else if _, ok := s.DocumentTypes[d.Identifier]; ok {
+		//Already exists
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(s.DocumentLocation) == "" {
+		w.WriteHeader(http.StatusInternalServerError)
+		//TODO better logging
+		return
+	}
+
+	reqData, err := io.ReadAll(req.Body)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+
+		return
+	}
+
+	fil, err := os.Create(filepath.Join(s.DocumentLocation, d.Identifier))
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		//TODO better logging
+		return
+	}
+
+	defer fil.Close()
+
+	fil.Write(reqData)
+	s.DocumentTypes[d.Identifier] = d
 }
