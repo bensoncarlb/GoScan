@@ -65,9 +65,9 @@ func (d *DocumentRegion) IsValid() bool {
 		return false
 	} else if strings.TrimSpace(d.RegionTitle) == "" {
 		return false
-	} /*else if d.Region == image.Rectangle{} {
+	} else if image.Rectangle.Empty(d.Region) {
 		return false
-	} */
+	}
 
 	return true
 }
