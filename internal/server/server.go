@@ -7,16 +7,18 @@ import (
 	"image"
 	"io"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
-	"github.com/bensoncarlb/GoScan/internal/documentType"
 	"github.com/bensoncarlb/GoScan/internal/gsRecord"
 	"github.com/bensoncarlb/GoScan/internal/ocr"
 	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/structs"
 )
 
 type Server struct {
@@ -25,7 +27,7 @@ type Server struct {
 	httpServer          http.Server
 	l                   net.Listener
 	ModOutput           *outputFile.OutputModule
-	DocumentTypes       map[string]documentType.DocumentType
+	DocumentTypes       map[string]structs.DocumentType
 	DocumentLocation    string
 	DocIdentifierRegion image.Rectangle
 }
@@ -102,7 +104,7 @@ func (s *Server) Stop() error {
 }
 
 // Func for goroutines to process incoming submissions to /data
-func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, docTypeRegion image.Rectangle, documentTypes map[string]documentType.DocumentType) {
+func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, docTypeRegion image.Rectangle, documentTypes map[string]structs.DocumentType) {
 	//Waiting for new item to process
 	//TODO handle concurrency
 	for outModule.IFile = range ch {
@@ -206,18 +208,11 @@ func (s *Server) retrieveItem(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
-	docTypes := make([]string, len(s.DocumentTypes))
-
-	i := 0
-	for _, doc := range s.DocumentTypes {
-		docTypes[i] = doc.Title
-
-		i += 1
-	}
+	rsp := structs.RspGetDocumentTypes{DocumentTypes: slices.Collect(maps.Values(s.DocumentTypes))}
 
 	b := bytes.Buffer{}
 
-	if err := json.NewEncoder(&b).Encode(docTypes); err != nil {
+	if err := json.NewEncoder(&b).Encode(rsp); err != nil {
 		panic(err)
 		//TODO better handling
 	}
@@ -246,7 +241,7 @@ func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) addDocType(w http.ResponseWriter, req *http.Request) {
-	d := documentType.DocumentType{}
+	d := structs.DocumentType{}
 	err := json.NewDecoder(req.Body).Decode(&d)
 
 	if err != nil {
