@@ -27,7 +27,7 @@ type ReqRetrieveItem struct {
 
 type RspRetrieveItem struct {
 	Fields  map[string]string `json:"fields"`
-	ImgData string            `json:"img_data"`
+	ImgData []byte            `json:"img_data"`
 }
 
 type DocumentType struct {

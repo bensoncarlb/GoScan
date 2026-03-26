@@ -219,7 +219,7 @@ func (s *Server) retrieveItem(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	rsp := structs.RspRetrieveItem{Fields: record.OCRData, ImgData: string(record.ImgData)}
+	rsp := structs.RspRetrieveItem{Fields: record.OCRData, ImgData: record.ImgData}
 
 	b := bytes.Buffer{}
 	json.NewEncoder(&b).Encode(rsp)
