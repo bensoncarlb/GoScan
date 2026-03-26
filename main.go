@@ -8,6 +8,7 @@ import (
 	"image"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
 	"github.com/bensoncarlb/GoScan/internal/data_sources/sourceFile"
@@ -56,7 +57,7 @@ func main() {
 	svr := server.Server{
 		ModOutput:           &modOutput,
 		DocumentTypes:       docTypes,
-		DocIdentifierRegion: image.Rect(0, 0, 1, 1),
+		DocIdentifierRegion: image.Rect(1200, 1800, 1700, 2200),
 		DocumentLocation:    docTypeDir}
 
 	err = svr.New()
@@ -131,7 +132,7 @@ func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error
 			continue
 		}
 
-		f, err := os.Open(dirEntry.Name())
+		f, err := os.Open(filepath.Join(directory, dirEntry.Name()))
 
 		if err != nil {
 			return nil, err
