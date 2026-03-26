@@ -117,7 +117,7 @@ func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, 
 			log.Fatalf("Failed to get Document Type: %s", err)
 		}
 
-		docType, found := documentTypes[docIdentifier]
+		docType, found := documentTypes[strings.ToLower(docIdentifier[:8])]
 
 		if found {
 			outModule.IFile.DocType = docType.Title
@@ -135,6 +135,8 @@ func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, 
 				if err != nil {
 					log.Fatalf("Failed to read image region %v for image %s", docRegions.RegionTitle, outModule.IFile.Name)
 				}
+
+				outModule.IFile.OCRData[docRegions.FieldName] = strings.TrimRight(outModule.IFile.OCRData[docRegions.FieldName], "\n")
 			}
 		} else {
 			//If no regions are defined, read the entire image as a single field
