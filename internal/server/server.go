@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"image"
-	"io"
 	"log"
 	"maps"
 	"net"
@@ -282,14 +281,6 @@ func (s *Server) addDocType(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	reqData, err := io.ReadAll(req.Body)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-
-		return
-	}
-
 	fil, err := os.Create(filepath.Join(s.DocumentLocation, d.Identifier))
 
 	if err != nil {
@@ -300,6 +291,11 @@ func (s *Server) addDocType(w http.ResponseWriter, req *http.Request) {
 
 	defer fil.Close()
 
-	fil.Write(reqData)
+	b := bytes.Buffer{}
+	json.NewEncoder(&b).Encode(d)
+
+	fil.Write(b.Bytes())
 	s.DocumentTypes[d.Identifier] = d
+
+	w.WriteHeader(http.StatusAccepted)
 }
