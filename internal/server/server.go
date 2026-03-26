@@ -204,7 +204,27 @@ func (s *Server) getItems(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) retrieveItem(w http.ResponseWriter, req *http.Request) {
+	itemReq := structs.ReqRetrieveItem{}
+	if err := json.NewDecoder(req.Body).Decode(&itemReq); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	} else if strings.TrimSpace(itemReq.ItemName) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
+	record, err := s.ModOutput.GetItem(itemReq.ItemName)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	rsp := structs.RspRetrieveItem{Fields: record.OCRData, ImgData: string(record.ImgData)}
+
+	b := bytes.Buffer{}
+	json.NewEncoder(&b).Encode(rsp)
+
+	w.Write(b.Bytes())
 }
 
 func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
