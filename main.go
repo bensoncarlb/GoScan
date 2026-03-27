@@ -8,22 +8,28 @@ import (
 	"image"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
-	"github.com/bensoncb/GoScan/internal/data_sources/sourceFile"
-	"github.com/bensoncb/GoScan/internal/documentType"
-	"github.com/bensoncb/GoScan/internal/gserrors"
-	"github.com/bensoncb/GoScan/internal/outputs/outputFile"
-	"github.com/bensoncb/GoScan/internal/server"
+	"github.com/bensoncarlb/GoScan/internal/data_sources/sourceFile"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
+	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/server"
+	"github.com/bensoncarlb/GoScan/structs"
 )
 
 func main() {
 	//Setup handler for outputing final data
 	//TODO configurable
 	var outputMethod string = "file" //Placeholder for switch below pending config support
-	var outputDir string = "/home/carl/GoScan/rcvd"
-	var inputDir string = "/home/carl/GoScan/test"
-	var docTypeDir string = "/home/carl/GoScan/DocumentTypes"
+	path, err := os.Getwd()
+
+	if err != nil {
+		panic(err)
+	}
+	var outputDir string = filepath.Join(path, "output")
+	var inputDir string = filepath.Join(path, "pickup")
+	var docTypeDir string = filepath.Join(path, "DocumentTypes")
 
 	//
 	// Setup the output module to be passed to the server.go process
@@ -53,7 +59,11 @@ func main() {
 	// Setup listening server
 	//
 	//TODO setup identifier region
-	svr := server.Server{ModOutput: &modOutput, DocumentTypes: docTypes, DocIdentifierRegion: image.Rect(0, 0, 1, 1)}
+	svr := server.Server{
+		ModOutput:           &modOutput,
+		DocumentTypes:       docTypes,
+		DocIdentifierRegion: image.Rect(1200, 1800, 1700, 2200),
+		DocumentLocation:    docTypeDir}
 
 	err = svr.New()
 	if err != nil {
@@ -95,7 +105,7 @@ func main() {
 	<-kill
 }
 
-func LoadDocumentTypes(directory string) (map[string]documentType.DocumentType, error) {
+func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error) {
 	if strings.TrimSpace(directory) == "" {
 		return nil, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
 	} else if _, err := os.Stat(directory); err != nil {
@@ -108,7 +118,7 @@ func LoadDocumentTypes(directory string) (map[string]documentType.DocumentType, 
 
 			//If no matching directory exists, create it
 			//Since it didn't exist no document types to return
-			return map[string]documentType.DocumentType{}, nil
+			return map[string]structs.DocumentType{}, nil
 		} else {
 			return nil, err
 		}
@@ -120,20 +130,20 @@ func LoadDocumentTypes(directory string) (map[string]documentType.DocumentType, 
 		return nil, err
 	}
 
-	docTypes := make(map[string]documentType.DocumentType, len(types))
+	docTypes := make(map[string]structs.DocumentType, len(types))
 
 	for _, dirEntry := range types {
 		if dirEntry.IsDir() {
 			continue
 		}
 
-		f, err := os.Open(dirEntry.Name())
+		f, err := os.Open(filepath.Join(directory, dirEntry.Name()))
 
 		if err != nil {
 			return nil, err
 		}
 
-		d := documentType.DocumentType{}
+		d := structs.DocumentType{}
 		err = json.NewDecoder(f).Decode(&d)
 
 		if err != nil {

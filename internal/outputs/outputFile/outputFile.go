@@ -4,13 +4,16 @@ package outputFile
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
-	"github.com/bensoncb/GoScan/internal/gsRecord"
-	"github.com/bensoncb/GoScan/internal/gserrors"
+	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
+	"github.com/bensoncarlb/GoScan/structs"
 )
 
 type OutputModule struct {
@@ -93,4 +96,40 @@ func New(Directory string) (OutputModule, error) {
 	}
 
 	return outModule, err
+}
+
+func (o *OutputModule) List() (structs.RspGetItems, error) {
+	if strings.TrimSpace(o.Directory) == "" {
+		return structs.RspGetItems{}, errors.New("no output Directory configured")
+	}
+
+	dir, err := os.ReadDir(o.Directory)
+
+	if err != nil {
+		return structs.RspGetItems{}, fmt.Errorf("failed to open output directory %s", o.Directory)
+	}
+
+	dirFiles := make([]string, len(dir))
+	i := 0
+	for _, dirEntry := range dir {
+		if !dirEntry.IsDir() {
+			dirFiles[i] = dirEntry.Name()
+			i += 1
+		}
+	}
+
+	return structs.RspGetItems{Items: dirFiles}, nil
+}
+
+func (o *OutputModule) GetItem(itemName string) (*gsRecord.RecordData, error) {
+	fil, err := os.Open(filepath.Join(o.Directory, itemName))
+
+	if err != nil {
+		return &gsRecord.RecordData{}, err
+	}
+
+	record := gsRecord.RecordData{}
+	json.NewDecoder(fil).Decode(&record)
+
+	return &record, nil
 }

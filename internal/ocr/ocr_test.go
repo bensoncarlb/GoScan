@@ -3,8 +3,8 @@ package ocr_test
 import (
 	"testing"
 
-	_ "github.com/bensoncb/GoScan/internal/gsRecord"
-	_ "github.com/bensoncb/GoScan/internal/ocr"
+	_ "github.com/bensoncarlb/GoScan/internal/gsRecord"
+	_ "github.com/bensoncarlb/GoScan/internal/ocr"
 )
 
 /*

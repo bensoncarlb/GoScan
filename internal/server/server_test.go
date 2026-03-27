@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/bensoncb/GoScan/internal/server"
+	"github.com/bensoncarlb/GoScan/internal/server"
 )
 
 func TestPing(t *testing.T) {

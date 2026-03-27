@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/bensoncb/GoScan/internal/gsRecord"
-	"github.com/bensoncb/GoScan/internal/gserrors"
+	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
 )
 
 func TestBaseGood(t *testing.T) {
