@@ -22,9 +22,14 @@ func main() {
 	//Setup handler for outputing final data
 	//TODO configurable
 	var outputMethod string = "file" //Placeholder for switch below pending config support
-	var outputDir string = "/home/carl/GoScan/rcvd"
-	var inputDir string = "/home/carl/GoScan/test"
-	var docTypeDir string = "/home/carl/GoScan/DocumentTypes"
+	path, err := os.Getwd()
+
+	if err != nil {
+		panic(err)
+	}
+	var outputDir string = filepath.Join(path, "output")
+	var inputDir string = filepath.Join(path, "pickup")
+	var docTypeDir string = filepath.Join(path, "DocumentTypes")
 
 	//
 	// Setup the output module to be passed to the server.go process
