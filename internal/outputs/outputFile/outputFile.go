@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bensoncarlb/GoScan/internal/gsRecord"
@@ -109,21 +110,21 @@ func (o *OutputModule) List() (structs.RspGetItems, error) {
 		return structs.RspGetItems{}, fmt.Errorf("failed to open output directory %s", o.Directory)
 	}
 
-	dirFiles := make([]string, len(dir))
-	i := 0
+	dirFiles := make([]string, 0, len(dir))
+
 	for _, dirEntry := range dir {
 		if !dirEntry.IsDir() {
-			dirFiles[i] = dirEntry.Name()
-			i += 1
+			dirFiles = append(dirFiles, dirEntry.Name())
 		}
 	}
 
-	return structs.RspGetItems{Items: dirFiles}, nil
+	return structs.RspGetItems{Items: slices.Clip(dirFiles)}, nil
 }
 
 func (o *OutputModule) GetItem(itemName string) (*gsRecord.RecordData, error) {
 	fil, err := os.Open(filepath.Join(o.Directory, itemName))
-
+	//TODO os.openroot
+	//os.root.Open ...
 	if err != nil {
 		return &gsRecord.RecordData{}, err
 	}

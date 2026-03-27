@@ -51,6 +51,7 @@ func fileWatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 			if event.Has(fsnotify.Write) {
 				if _, found := seenFiles.Load(event.Name); !found {
 					seenFiles.Store(event.Name, true, timeout, func(file string, _ bool) { chEvents <- file })
+					log.Println("New file: " + event.Name)
 				} else {
 					seenFiles.Refresh(event.Name, timeout)
 				}

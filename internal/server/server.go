@@ -4,6 +4,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	"log"
 	"maps"
@@ -31,6 +32,7 @@ type Server struct {
 	DocIdentifierRegion image.Rectangle
 }
 
+// TODO make constructor rather than method
 // Setup the listening server
 func (s *Server) New() error {
 	//Setup a channel for processing incoming input files
@@ -77,6 +79,8 @@ func (s *Server) Start() error {
 
 	go s.httpServer.Serve(s.l)
 
+	fmt.Println("Listening on localhost:8090")
+
 	s.isReady = true
 
 	return nil
@@ -105,7 +109,7 @@ func (s *Server) Stop() error {
 // Func for goroutines to process incoming submissions to /data
 func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, docTypeRegion image.Rectangle, documentTypes map[string]structs.DocumentType) {
 	//Waiting for new item to process
-	//TODO handle concurrency
+	//TODO handle concurrency; create standalone item in func
 	for outModule.IFile = range ch {
 		log.Printf("Process routine received new item for processing: %s", outModule.IFile.Name)
 
@@ -242,7 +246,7 @@ func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
-	d := bytes.NewBuffer
+	d := bytes.Buffer{}
 	err := json.NewDecoder(req.Body).Decode(&d)
 
 	if err != nil {

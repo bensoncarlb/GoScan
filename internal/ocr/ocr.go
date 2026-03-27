@@ -26,7 +26,12 @@ func ReadRegion(img *image.Gray, r image.Rectangle) (string, error) {
 	}
 
 	data := base64.StdEncoding.EncodeToString(buf.Bytes())
-
+	//TODO handle better
+	/*cmd := exec.command
+	cmd.stdin ...
+	cmd.run
+	cmd.stdout
+	cmd.stderr*/
 	cmd := fmt.Sprintf("echo %s | base64 -d | tesseract stdin stdout", data)
 
 	res, err := exec.Command("bash", "-c", cmd).Output()
