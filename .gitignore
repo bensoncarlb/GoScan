@@ -1,3 +1,4 @@
-test/
-rcvd/
+DocumentTypes/
+pickup/
+output/
 *.exe
