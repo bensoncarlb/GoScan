@@ -50,6 +50,7 @@ func main() {
 	//
 	// Load configured document types
 	//
+	//TODO move to server.go
 	docTypes, err := LoadDocumentTypes(docTypeDir)
 
 	if err != nil {
@@ -59,13 +60,12 @@ func main() {
 	// Setup listening server
 	//
 	//TODO setup identifier region
-	svr := server.Server{
-		ModOutput:           &modOutput,
-		DocumentTypes:       docTypes,
-		DocIdentifierRegion: image.Rect(1200, 1800, 1700, 2200),
-		DocumentLocation:    docTypeDir}
+	svr, err := server.New(
+		&modOutput,
+		docTypes,
+		image.Rect(1200, 1800, 1700, 2200),
+		docTypeDir)
 
-	err = svr.New()
 	if err != nil {
 		panic(err)
 	}
@@ -110,13 +110,13 @@ func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error
 		return nil, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
 	} else if _, err := os.Stat(directory); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			//If no matching directory exists, create it
 			err = os.MkdirAll(directory, os.ModePerm)
 
 			if err != nil {
 				return nil, err
 			}
 
-			//If no matching directory exists, create it
 			//Since it didn't exist no document types to return
 			return map[string]structs.DocumentType{}, nil
 		} else {
@@ -137,7 +137,7 @@ func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error
 			continue
 		}
 
-		f, err := os.Open(filepath.Join(directory, dirEntry.Name()))
+		f, err := os.OpenInRoot(directory, dirEntry.Name())
 
 		if err != nil {
 			return nil, err

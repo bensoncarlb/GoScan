@@ -68,14 +68,15 @@ func StartServer(OutDir string) *server.Server {
 
 	//Setup listening server
 	svr := server.Server{ModOutput: &ModOutput}
+	/*
+		if err := svr.New(); err != nil {
+			panic(err)
+		}
 
-	if err := svr.New(); err != nil {
-		panic(err)
-	}
-
-	if err := svr.Start(); err != nil {
-		panic(err)
-	}
-
+		if err := svr.Start(); err != nil {
+			panic(err)
+		}
+	*/
+	//TODO
 	return &svr
 }

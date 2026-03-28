@@ -3,38 +3,63 @@ package ocr
 
 import (
 	"bytes"
-	"encoding/base64"
-	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
+	"io"
 	"log"
 	"os/exec"
 )
 
 func init() {
-	//TODO check tesseract
+	pipeErr, wpipeErr := io.Pipe()
+	defer pipeErr.Close()
+	//TODO make work
+	cmd := exec.Command("tesseracst", "--version")
+	cmd.Stdout = wpipeErr
+	cmd.Run()
+	wpipeErr.Close()
+
+	if res, err := io.ReadAll(pipeErr); err != nil {
+		panic(err)
+	} else if len(res) > 0 {
+		panic(res)
+	}
 }
 
 // For a provided item, read and return the OCR'd data
 func ReadRegion(img *image.Gray, r image.Rectangle) (string, error) {
-	buf := new(bytes.Buffer)
-	err := png.Encode(buf, img.SubImage(r))
+	subImg := new(bytes.Buffer)
+	err := png.Encode(subImg, img.SubImage(r))
 
 	if err != nil {
 		return "", err
 	}
 
-	data := base64.StdEncoding.EncodeToString(buf.Bytes())
-	//TODO handle better
-	/*cmd := exec.command
-	cmd.stdin ...
-	cmd.run
-	cmd.stdout
-	cmd.stderr*/
-	cmd := fmt.Sprintf("echo %s | base64 -d | tesseract stdin stdout", data)
+	pipeRes, wpipeRes := io.Pipe()
+	pipeErr, wpipeErr := io.Pipe()
 
-	res, err := exec.Command("bash", "-c", cmd).Output()
+	defer pipeRes.Close()
+	defer pipeErr.Close()
+
+	cmd := exec.Command("tesseract", "stdin", "stdout")
+	cmd.Stdin = bytes.NewReader(subImg.Bytes())
+
+	cmd.Stdout = wpipeRes
+	cmd.Stderr = wpipeErr
+
+	if err = cmd.Run(); err != nil {
+		return "", err
+	}
+
+	wpipeRes.Close()
+	wpipeErr.Close()
+
+	if rd, err := io.ReadAll(pipeErr); len(rd) > 0 {
+		return "", err
+	}
+
+	res, err := io.ReadAll(pipeRes)
 
 	if err != nil {
 		return "", err

@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -122,9 +121,8 @@ func (o *OutputModule) List() (structs.RspGetItems, error) {
 }
 
 func (o *OutputModule) GetItem(itemName string) (*gsRecord.RecordData, error) {
-	fil, err := os.Open(filepath.Join(o.Directory, itemName))
-	//TODO os.openroot
-	//os.root.Open ...
+	fil, err := os.OpenInRoot(o.Directory, itemName)
+
 	if err != nil {
 		return &gsRecord.RecordData{}, err
 	}

@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -22,37 +21,52 @@ import (
 )
 
 type Server struct {
-	ch                  chan gsRecord.RecordData
+	chPendingDocs       chan gsRecord.RecordData
 	isReady             bool
 	httpServer          http.Server
 	l                   net.Listener
 	ModOutput           *outputFile.OutputModule
 	DocumentTypes       map[string]structs.DocumentType
 	DocumentLocation    string
+	DocumentTypeRoot    os.Root
 	DocIdentifierRegion image.Rectangle
 }
 
 // TODO make constructor rather than method
 // Setup the listening server
-func (s *Server) New() error {
+func New(modOutput *outputFile.OutputModule, docTypes map[string]structs.DocumentType, docIdentifierRegion image.Rectangle, docTypeDir string) (*Server, error) {
 	//Setup a channel for processing incoming input files
 	//TODO configurable
-	s.ch = make(chan gsRecord.RecordData, 50)
+	svr := Server{
+		ModOutput:           modOutput,
+		DocumentTypes:       docTypes,
+		DocIdentifierRegion: image.Rect(1200, 1800, 1700, 2200),
+		DocumentLocation:    docTypeDir}
 
-	s.httpServer = http.Server{}
+	docRoot, err := os.OpenRoot(docTypeDir)
+
+	if err != nil {
+		return &Server{}, nil
+	}
+
+	svr.DocumentTypeRoot = *docRoot
+
+	svr.chPendingDocs = make(chan gsRecord.RecordData, 50)
+
+	svr.httpServer = http.Server{}
 	sm := http.NewServeMux()
 
-	sm.HandleFunc("/data", s.receiveData)
-	sm.HandleFunc("/ping", s.ping)
-	sm.HandleFunc("/getitems", s.getItems)
-	sm.HandleFunc("/retrieveitem", s.retrieveItem)
-	sm.HandleFunc("/getdoctypes", s.getDocTypes)
-	sm.HandleFunc("/adddoctype", s.addDocType)
-	sm.HandleFunc("/deletedoctype", s.deleteDocType)
+	sm.HandleFunc("/data", svr.receiveData)
+	sm.HandleFunc("/ping", svr.ping)
+	sm.HandleFunc("/getitems", svr.getItems)
+	sm.HandleFunc("/retrieveitem", svr.retrieveItem)
+	sm.HandleFunc("/getdoctypes", svr.getDocTypes)
+	sm.HandleFunc("/adddoctype", svr.addDocType)
+	sm.HandleFunc("/deletedoctype", svr.deleteDocType)
 
-	s.httpServer.Handler = sm
+	svr.httpServer.Handler = sm
 
-	return nil
+	return &svr, nil
 }
 
 // Startup the listening server
@@ -74,7 +88,7 @@ func (s *Server) Start() error {
 	//TODO configurable
 	for range 1 {
 		//Kick off routine(s) to listen for new items to process
-		go process(s.ch, s.ModOutput, s.DocIdentifierRegion, s.DocumentTypes)
+		go process(s.chPendingDocs, s.ModOutput, s.DocIdentifierRegion, s.DocumentTypes)
 	}
 
 	go s.httpServer.Serve(s.l)
@@ -98,9 +112,9 @@ func (s *Server) Stop() error {
 
 	s.httpServer.Close()
 
-	if s.ch != nil {
-		close(s.ch)
-		s.ch = nil
+	if s.chPendingDocs != nil {
+		close(s.chPendingDocs)
+		s.chPendingDocs = nil
 	}
 
 	return nil
@@ -176,7 +190,7 @@ func (dr *Server) receiveData(w http.ResponseWriter, req *http.Request) {
 
 	d.OCRData = map[string]string{}
 
-	dr.ch <- d
+	dr.chPendingDocs <- d
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -246,7 +260,7 @@ func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
-	d := bytes.Buffer{}
+	d := structs.ReqDeleteDocumentType{}
 	err := json.NewDecoder(req.Body).Decode(&d)
 
 	if err != nil {
@@ -254,12 +268,11 @@ func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	//TODO sort out parsing the incoming request
-	if docType, ok := s.DocumentTypes[""]; !ok {
+	if _, ok := s.DocumentTypes[d.DocumentType]; !ok {
 		w.WriteHeader(http.StatusBadRequest)
 	} else {
-		delete(s.DocumentTypes, docType.Title)
-		os.Remove(docType.Identifier)
+		delete(s.DocumentTypes, d.DocumentType)
+		s.DocumentTypeRoot.Remove(d.DocumentType)
 
 		w.WriteHeader(http.StatusOK)
 	}
@@ -287,7 +300,7 @@ func (s *Server) addDocType(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fil, err := os.Create(filepath.Join(s.DocumentLocation, d.Identifier))
+	fil, err := s.DocumentTypeRoot.Open(d.Identifier)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

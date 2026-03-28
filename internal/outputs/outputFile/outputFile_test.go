@@ -2,8 +2,8 @@ package outputFile_test
 
 import (
 	"bytes"
+	"io"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/bensoncarlb/GoScan/internal/gsRecord"
@@ -35,7 +35,13 @@ func TestGoodOutput(t *testing.T) {
 		t.Fatalf(("Failed to save data: %s"), err)
 	}
 
-	file, err := os.ReadFile(filepath.Join(TestDir, TestFile))
+	path, err := os.OpenInRoot(TestDir, TestFile)
+
+	if err != nil {
+		t.Fatalf("Failed opening file: %s", err)
+	}
+
+	file, err := io.ReadAll(path)
 
 	if err != nil {
 		t.Fatalf("Failed opening file: %s", err)
