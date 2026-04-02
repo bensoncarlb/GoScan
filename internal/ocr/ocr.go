@@ -6,24 +6,17 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
-	"io"
 	"log"
 	"os/exec"
 )
 
 func init() {
-	pipeErr, wpipeErr := io.Pipe()
-	defer pipeErr.Close()
-	//TODO make work
-	cmd := exec.Command("tesseracst", "--version")
-	cmd.Stdout = wpipeErr
-	cmd.Run()
-	wpipeErr.Close()
+	cmd := exec.Command("tesseract", "--version")
 
-	if res, err := io.ReadAll(pipeErr); err != nil {
-		panic(err)
-	} else if len(res) > 0 {
-		panic(res)
+	_, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -36,30 +29,18 @@ func ReadRegion(img *image.Gray, r image.Rectangle) (string, error) {
 		return "", err
 	}
 
-	pipeRes, wpipeRes := io.Pipe()
-	pipeErr, wpipeErr := io.Pipe()
-
-	defer pipeRes.Close()
-	defer pipeErr.Close()
-
 	cmd := exec.Command("tesseract", "stdin", "stdout")
-	cmd.Stdin = bytes.NewReader(subImg.Bytes())
 
-	cmd.Stdout = wpipeRes
-	cmd.Stderr = wpipeErr
+	stdin, err := cmd.StdinPipe()
 
-	if err = cmd.Run(); err != nil {
+	if err != nil {
 		return "", err
 	}
 
-	wpipeRes.Close()
-	wpipeErr.Close()
+	stdin.Write(subImg.Bytes())
+	stdin.Close()
 
-	if rd, err := io.ReadAll(pipeErr); len(rd) > 0 {
-		return "", err
-	}
-
-	res, err := io.ReadAll(pipeRes)
+	res, err := cmd.CombinedOutput()
 
 	if err != nil {
 		return "", err
