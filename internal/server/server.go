@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	_ "image/png"
 	"log"
 	"maps"
 	"net"
@@ -16,7 +17,7 @@ import (
 
 	"github.com/bensoncarlb/GoScan/internal/gsRecord"
 	"github.com/bensoncarlb/GoScan/internal/ocr"
-	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/outputs"
 	"github.com/bensoncarlb/GoScan/structs"
 )
 
@@ -25,7 +26,7 @@ type Server struct {
 	isReady             bool
 	httpServer          http.Server
 	l                   net.Listener
-	ModOutput           *outputFile.OutputModule
+	ModOutput           outputs.Module
 	DocumentTypes       map[string]structs.DocumentType
 	DocumentLocation    string
 	DocumentTypeRoot    os.Root
@@ -34,7 +35,7 @@ type Server struct {
 
 // TODO make constructor rather than method
 // Setup the listening server
-func New(modOutput *outputFile.OutputModule, docTypes map[string]structs.DocumentType, docIdentifierRegion image.Rectangle, docTypeDir string) (*Server, error) {
+func New(modOutput outputs.Module, docTypes map[string]structs.DocumentType, docIdentifierRegion image.Rectangle, docTypeDir string) (*Server, error) {
 	//Setup a channel for processing incoming input files
 	//TODO configurable
 	svr := Server{
@@ -120,49 +121,65 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+func checkRectangle(rImage image.Rectangle, rRegion image.Rectangle) bool {
+	if rImage.Min.X < rRegion.Min.X || rImage.Min.Y < rRegion.Min.Y {
+		return false
+	} else if rImage.Max.X < rRegion.Max.X || rImage.Max.Y < rRegion.Max.Y {
+		return false
+	}
+
+	return true
+}
+
 // Func for goroutines to process incoming submissions to /data
-func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, docTypeRegion image.Rectangle, documentTypes map[string]structs.DocumentType) {
+func process(ch <-chan gsRecord.RecordData, outModule outputs.Module, docTypeRegion image.Rectangle, documentTypes map[string]structs.DocumentType) {
 	//Waiting for new item to process
 	//TODO handle concurrency; create standalone item in func
-	for outModule.IFile = range ch {
-		log.Printf("Process routine received new item for processing: %s", outModule.IFile.Name)
+	for newRecord := range ch {
+		log.Printf("Process routine received new item for processing: %s", newRecord.Name)
 
-		img := ocr.ConvertToGray(outModule.IFile.ImgData)
+		img := ocr.ConvertToGray(newRecord.ImgData)
+		var docType structs.DocumentType
+		var err error
 
-		docIdentifier, err := ocr.ReadRegion(img, docTypeRegion)
+		if checkRectangle(img.Bounds(), docTypeRegion) {
+			docIdentifier, err := ocr.ReadRegion(img, docTypeRegion)
 
-		if err != nil {
-			log.Fatalf("Failed to get Document Type: %s", err)
-		}
+			if err != nil {
+				log.Fatalf("Failed to get Document Type: %s", err)
+			}
 
-		docType, found := documentTypes[strings.ToLower(docIdentifier[:8])]
+			docType, found := documentTypes[strings.ToLower(docIdentifier[:8])]
 
-		if found {
-			outModule.IFile.DocType = docType.Title
+			if found {
+				newRecord.DocType = docType.Title
+			} else {
+				//TODO configurable
+				newRecord.DocType = "Default"
+			}
 		} else {
-			//TODO configurable
-			outModule.IFile.DocType = "Default"
+			newRecord.DocType = "Default"
 		}
 
 		// Read and save off the document data via OCR
-		if found && len(docType.Regions) > 0 {
+		if len(docType.Regions) > 0 {
 			for _, docRegions := range docType.Regions {
 
-				outModule.IFile.OCRData[docRegions.FieldName], err = ocr.ReadRegion(img, docRegions.Region)
+				newRecord.OCRData[docRegions.FieldName], err = ocr.ReadRegion(img, docRegions.Region)
 
 				if err != nil {
-					log.Fatalf("Failed to read image region %v for image %s", docRegions.RegionTitle, outModule.IFile.Name)
+					log.Fatalf("Failed to read image region %v for image %s", docRegions.RegionTitle, newRecord.Name)
 				}
 
-				outModule.IFile.OCRData[docRegions.FieldName] = strings.TrimRight(outModule.IFile.OCRData[docRegions.FieldName], "\n")
+				newRecord.OCRData[docRegions.FieldName] = strings.TrimRight(newRecord.OCRData[docRegions.FieldName], "\n")
 			}
 		} else {
 			//If no regions are defined, read the entire image as a single field
 			//TODO configurable
-			outModule.IFile.OCRData["data"], err = ocr.ReadRegion(img, img.Bounds())
+			newRecord.OCRData["data"], err = ocr.ReadRegion(img, img.Bounds())
 
 			if err != nil {
-				log.Fatalf("Failed to read data for %s", outModule.IFile.Name)
+				log.Fatalf("Failed to read data: %s", err)
 			}
 		}
 
@@ -171,7 +188,7 @@ func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, 
 		}
 
 		// Save off the incoming data via the Output Module
-		if err := outModule.Save(); err != nil {
+		if err := outModule.Save(&newRecord); err != nil {
 			panic(err)
 		}
 	}
@@ -204,7 +221,7 @@ func (dr *Server) ping(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) getItems(w http.ResponseWriter, req *http.Request) {
-	items, err := s.ModOutput.List()
+	items, err := s.ModOutput.ListItems()
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -232,7 +249,7 @@ func (s *Server) retrieveItem(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	record, err := s.ModOutput.GetItem(itemReq.ItemName)
+	record, err := s.ModOutput.Retrieve(itemReq.ItemName)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return

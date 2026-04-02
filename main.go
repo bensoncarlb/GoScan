@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bensoncarlb/GoScan/internal/data_sources/sourceFile"
 	"github.com/bensoncarlb/GoScan/internal/gserrors"
-	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/inputs"
+	"github.com/bensoncarlb/GoScan/internal/outputs"
 	"github.com/bensoncarlb/GoScan/internal/server"
 	"github.com/bensoncarlb/GoScan/structs"
 )
@@ -21,30 +21,32 @@ import (
 func main() {
 	//Setup handler for outputing final data
 	//TODO configurable
-	var outputMethod string = "file" //Placeholder for switch below pending config support
+	var outputMethod = "file" //Placeholder for switch below pending config support
 	path, err := os.Getwd()
 
 	if err != nil {
 		panic(err)
 	}
-	var outputDir string = filepath.Join(path, "output")
-	var inputDir string = filepath.Join(path, "pickup")
-	var docTypeDir string = filepath.Join(path, "DocumentTypes")
+	var outputDir = filepath.Join(path, "output")
+	var inputDir = filepath.Join(path, "pickup")
+	inputMethod := "file"
+	var docTypeDir = filepath.Join(path, "DocumentTypes")
 
 	//
 	// Setup the output module to be passed to the server.go process
 	//
-	modOutput, err := outputFile.New(outputDir)
+	var modOutput outputs.Module
+
+	switch strings.ToLower(outputMethod) {
+	case "file":
+		modOutput = outputs.OutputFile{Directory: outputDir}
+		err = modOutput.Init()
+	default:
+		panic(fmt.Errorf("unrecognized output method %s", outputMethod))
+	}
 
 	if err != nil {
 		panic(err)
-	}
-
-	switch outputMethod {
-	case "file":
-		//TODO Something with output method
-	default:
-		panic(fmt.Errorf("unrecognized output method %s", outputMethod))
 	}
 
 	//
@@ -61,7 +63,7 @@ func main() {
 	//
 	//TODO setup identifier region
 	svr, err := server.New(
-		&modOutput,
+		modOutput,
 		docTypes,
 		image.Rect(1200, 1800, 1700, 2200),
 		docTypeDir)
@@ -81,7 +83,15 @@ func main() {
 	//
 	// Setup the data source listener module
 	//
-	dataInput, err := sourceFile.New(inputDir, "http://localhost:8090/data") //TODO configurable
+	var dataInput inputs.Module
+
+	switch strings.ToLower(inputMethod) {
+	case "file":
+		dataInput = inputs.FileWatch{Directory: inputDir, DataEndpoint: "http://localhost:8090/data"}
+		err = dataInput.Init()
+	default:
+		panic("unknown input method: " + inputMethod)
+	}
 
 	if err != nil {
 		panic(err)
