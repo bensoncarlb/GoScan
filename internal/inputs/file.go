@@ -3,6 +3,7 @@ package inputs
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -182,7 +183,24 @@ func (s FileWatch) validate() error {
 
 // Validate and prepare a SourceConfig to file pickup
 func (f FileWatch) Init() error {
-	return f.validate()
+	if err := f.validate(); err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(f.Directory); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			//If no matching directory exists, create it
+			err = os.MkdirAll(f.Directory, os.ModePerm)
+
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (f FileWatch) IsReady() (bool, error) {
