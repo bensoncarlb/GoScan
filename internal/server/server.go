@@ -4,6 +4,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/png"
@@ -16,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
 	"github.com/bensoncarlb/GoScan/internal/ocr"
 	"github.com/bensoncarlb/GoScan/internal/outputs"
 	"github.com/bensoncarlb/GoScan/structs"
@@ -35,22 +37,27 @@ type Server struct {
 
 // TODO make constructor rather than method
 // Setup the listening server
-func New(modOutput outputs.Module, docTypes map[string]structs.DocumentType, docIdentifierRegion image.Rectangle, docTypeDir string) (*Server, error) {
+func New(modOutput outputs.Module, docIdentifierRegion image.Rectangle, docTypeDir string) (*Server, error) {
 	//Setup a channel for processing incoming input files
 	//TODO configurable
 	svr := Server{
 		ModOutput:           modOutput,
-		DocumentTypes:       docTypes,
 		DocIdentifierRegion: image.Rect(1200, 1800, 1700, 2200),
 		DocumentLocation:    docTypeDir}
 
 	docRoot, err := os.OpenRoot(docTypeDir)
 
 	if err != nil {
-		return &Server{}, nil
+		return &Server{}, err
 	}
 
 	svr.DocumentTypeRoot = *docRoot
+
+	svr.DocumentTypes, err = LoadDocumentTypes(docTypeDir)
+
+	if err != nil {
+		return &Server{}, err
+	}
 
 	svr.chPendingDocs = make(chan gsRecord.RecordData, 50)
 
@@ -131,10 +138,60 @@ func checkRectangle(rImage image.Rectangle, rRegion image.Rectangle) bool {
 	return true
 }
 
+func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error) {
+	if strings.TrimSpace(directory) == "" {
+		return nil, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
+	} else if _, err := os.Stat(directory); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			//If no matching directory exists, create it
+			err = os.MkdirAll(directory, os.ModePerm)
+
+			if err != nil {
+				return nil, err
+			}
+
+			//Since it didn't exist no document types to return
+			return map[string]structs.DocumentType{}, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	types, err := os.ReadDir(directory)
+
+	if err != nil {
+		return nil, err
+	}
+
+	docTypes := make(map[string]structs.DocumentType, len(types))
+
+	for _, dirEntry := range types {
+		if dirEntry.IsDir() {
+			continue
+		}
+
+		f, err := os.OpenInRoot(directory, dirEntry.Name())
+
+		if err != nil {
+			return nil, err
+		}
+
+		d := structs.DocumentType{}
+		err = json.NewDecoder(f).Decode(&d)
+
+		if err != nil {
+			return nil, err
+		}
+
+		docTypes[d.Identifier] = d
+	}
+
+	return docTypes, nil
+}
+
 // Func for goroutines to process incoming submissions to /data
 func process(ch <-chan gsRecord.RecordData, outModule outputs.Module, docTypeRegion image.Rectangle, documentTypes map[string]structs.DocumentType) {
 	//Waiting for new item to process
-	//TODO handle concurrency; create standalone item in func
 	for newRecord := range ch {
 		log.Printf("Process routine received new item for processing: %s", newRecord.Name)
 

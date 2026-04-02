@@ -2,8 +2,6 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"image"
 	"os"
@@ -11,11 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bensoncarlb/GoScan/internal/gserrors"
 	"github.com/bensoncarlb/GoScan/internal/inputs"
 	"github.com/bensoncarlb/GoScan/internal/outputs"
 	"github.com/bensoncarlb/GoScan/internal/server"
-	"github.com/bensoncarlb/GoScan/structs"
 )
 
 func main() {
@@ -50,21 +46,11 @@ func main() {
 	}
 
 	//
-	// Load configured document types
-	//
-	//TODO move to server.go
-	docTypes, err := LoadDocumentTypes(docTypeDir)
-
-	if err != nil {
-		panic(err)
-	}
-	//
 	// Setup listening server
 	//
 	//TODO setup identifier region
 	svr, err := server.New(
 		modOutput,
-		docTypes,
 		image.Rect(1200, 1800, 1700, 2200),
 		docTypeDir)
 
@@ -113,55 +99,4 @@ func main() {
 	signal.Notify(kill, os.Interrupt)
 
 	<-kill
-}
-
-func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error) {
-	if strings.TrimSpace(directory) == "" {
-		return nil, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
-	} else if _, err := os.Stat(directory); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			//If no matching directory exists, create it
-			err = os.MkdirAll(directory, os.ModePerm)
-
-			if err != nil {
-				return nil, err
-			}
-
-			//Since it didn't exist no document types to return
-			return map[string]structs.DocumentType{}, nil
-		} else {
-			return nil, err
-		}
-	}
-
-	types, err := os.ReadDir(directory)
-
-	if err != nil {
-		return nil, err
-	}
-
-	docTypes := make(map[string]structs.DocumentType, len(types))
-
-	for _, dirEntry := range types {
-		if dirEntry.IsDir() {
-			continue
-		}
-
-		f, err := os.OpenInRoot(directory, dirEntry.Name())
-
-		if err != nil {
-			return nil, err
-		}
-
-		d := structs.DocumentType{}
-		err = json.NewDecoder(f).Decode(&d)
-
-		if err != nil {
-			return nil, err
-		}
-
-		docTypes[d.Identifier] = d
-	}
-
-	return docTypes, nil
 }
