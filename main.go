@@ -2,8 +2,6 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"image"
 	"os"
@@ -11,61 +9,51 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bensoncarlb/GoScan/internal/data_sources/sourceFile"
-	"github.com/bensoncarlb/GoScan/internal/gserrors"
-	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/inputs"
+	"github.com/bensoncarlb/GoScan/internal/outputs"
 	"github.com/bensoncarlb/GoScan/internal/server"
-	"github.com/bensoncarlb/GoScan/structs"
 )
 
 func main() {
 	//Setup handler for outputing final data
 	//TODO configurable
-	var outputMethod string = "file" //Placeholder for switch below pending config support
+	var outputMethod = "file" //Placeholder for switch below pending config support
 	path, err := os.Getwd()
 
 	if err != nil {
 		panic(err)
 	}
-	var outputDir string = filepath.Join(path, "output")
-	var inputDir string = filepath.Join(path, "pickup")
-	var docTypeDir string = filepath.Join(path, "DocumentTypes")
+	var outputDir = filepath.Join(path, "output")
+	var inputDir = filepath.Join(path, "pickup")
+	inputMethod := "file"
+	var docTypeDir = filepath.Join(path, "DocumentTypes")
 
 	//
 	// Setup the output module to be passed to the server.go process
 	//
-	modOutput, err := outputFile.New(outputDir)
+	var modOutput outputs.Module
 
-	if err != nil {
-		panic(err)
-	}
-
-	switch outputMethod {
+	switch strings.ToLower(outputMethod) {
 	case "file":
-		//TODO Something with output method
+		modOutput = outputs.OutputFile{Directory: outputDir}
+		err = modOutput.Init()
 	default:
 		panic(fmt.Errorf("unrecognized output method %s", outputMethod))
 	}
 
-	//
-	// Load configured document types
-	//
-	docTypes, err := LoadDocumentTypes(docTypeDir)
-
 	if err != nil {
 		panic(err)
 	}
+
 	//
 	// Setup listening server
 	//
 	//TODO setup identifier region
-	svr := server.Server{
-		ModOutput:           &modOutput,
-		DocumentTypes:       docTypes,
-		DocIdentifierRegion: image.Rect(1200, 1800, 1700, 2200),
-		DocumentLocation:    docTypeDir}
+	svr, err := server.New(
+		modOutput,
+		image.Rect(1200, 1800, 1700, 2200),
+		docTypeDir)
 
-	err = svr.New()
 	if err != nil {
 		panic(err)
 	}
@@ -81,7 +69,15 @@ func main() {
 	//
 	// Setup the data source listener module
 	//
-	dataInput, err := sourceFile.New(inputDir, "http://localhost:8090/data") //TODO configurable
+	var dataInput inputs.Module
+
+	switch strings.ToLower(inputMethod) {
+	case "file":
+		dataInput = inputs.FileWatch{Directory: inputDir, DataEndpoint: "http://localhost:8090/data"}
+		err = dataInput.Init()
+	default:
+		panic("unknown input method: " + inputMethod)
+	}
 
 	if err != nil {
 		panic(err)
@@ -103,55 +99,4 @@ func main() {
 	signal.Notify(kill, os.Interrupt)
 
 	<-kill
-}
-
-func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error) {
-	if strings.TrimSpace(directory) == "" {
-		return nil, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
-	} else if _, err := os.Stat(directory); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			err = os.MkdirAll(directory, os.ModePerm)
-
-			if err != nil {
-				return nil, err
-			}
-
-			//If no matching directory exists, create it
-			//Since it didn't exist no document types to return
-			return map[string]structs.DocumentType{}, nil
-		} else {
-			return nil, err
-		}
-	}
-
-	types, err := os.ReadDir(directory)
-
-	if err != nil {
-		return nil, err
-	}
-
-	docTypes := make(map[string]structs.DocumentType, len(types))
-
-	for _, dirEntry := range types {
-		if dirEntry.IsDir() {
-			continue
-		}
-
-		f, err := os.Open(filepath.Join(directory, dirEntry.Name()))
-
-		if err != nil {
-			return nil, err
-		}
-
-		d := structs.DocumentType{}
-		err = json.NewDecoder(f).Decode(&d)
-
-		if err != nil {
-			return nil, err
-		}
-
-		docTypes[d.Identifier] = d
-	}
-
-	return docTypes, nil
 }

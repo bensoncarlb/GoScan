@@ -3,8 +3,6 @@ package ocr
 
 import (
 	"bytes"
-	"encoding/base64"
-	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
@@ -13,28 +11,36 @@ import (
 )
 
 func init() {
-	//TODO check tesseract
+	cmd := exec.Command("tesseract", "--version")
+
+	_, err := cmd.CombinedOutput()
+
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // For a provided item, read and return the OCR'd data
 func ReadRegion(img *image.Gray, r image.Rectangle) (string, error) {
-	buf := new(bytes.Buffer)
-	err := png.Encode(buf, img.SubImage(r))
+	subImg := new(bytes.Buffer)
+	err := png.Encode(subImg, img.SubImage(r))
 
 	if err != nil {
 		return "", err
 	}
 
-	data := base64.StdEncoding.EncodeToString(buf.Bytes())
-	//TODO handle better
-	/*cmd := exec.command
-	cmd.stdin ...
-	cmd.run
-	cmd.stdout
-	cmd.stderr*/
-	cmd := fmt.Sprintf("echo %s | base64 -d | tesseract stdin stdout", data)
+	cmd := exec.Command("tesseract", "stdin", "stdout")
 
-	res, err := exec.Command("bash", "-c", cmd).Output()
+	stdin, err := cmd.StdinPipe()
+
+	if err != nil {
+		return "", err
+	}
+
+	stdin.Write(subImg.Bytes())
+	stdin.Close()
+
+	res, err := cmd.CombinedOutput()
 
 	if err != nil {
 		return "", err

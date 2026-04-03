@@ -4,55 +4,77 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
+	_ "image/png"
 	"log"
 	"maps"
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/bensoncarlb/GoScan/internal/gsRecord"
+	"github.com/bensoncarlb/GoScan/internal/gserrors"
 	"github.com/bensoncarlb/GoScan/internal/ocr"
-	"github.com/bensoncarlb/GoScan/internal/outputs/outputFile"
+	"github.com/bensoncarlb/GoScan/internal/outputs"
 	"github.com/bensoncarlb/GoScan/structs"
 )
 
 type Server struct {
-	ch                  chan gsRecord.RecordData
+	chPendingDocs       chan gsRecord.RecordData
 	isReady             bool
 	httpServer          http.Server
 	l                   net.Listener
-	ModOutput           *outputFile.OutputModule
+	ModOutput           outputs.Module
 	DocumentTypes       map[string]structs.DocumentType
 	DocumentLocation    string
+	DocumentTypeRoot    os.Root
 	DocIdentifierRegion image.Rectangle
 }
 
 // TODO make constructor rather than method
 // Setup the listening server
-func (s *Server) New() error {
+func New(modOutput outputs.Module, docIdentifierRegion image.Rectangle, docTypeDir string) (*Server, error) {
 	//Setup a channel for processing incoming input files
 	//TODO configurable
-	s.ch = make(chan gsRecord.RecordData, 50)
+	svr := Server{
+		ModOutput:           modOutput,
+		DocIdentifierRegion: image.Rect(1200, 1800, 1700, 2200),
+		DocumentLocation:    docTypeDir}
 
-	s.httpServer = http.Server{}
+	docRoot, err := os.OpenRoot(docTypeDir)
+
+	if err != nil {
+		return &Server{}, err
+	}
+
+	svr.DocumentTypeRoot = *docRoot
+
+	svr.DocumentTypes, err = LoadDocumentTypes(docTypeDir)
+
+	if err != nil {
+		return &Server{}, err
+	}
+
+	svr.chPendingDocs = make(chan gsRecord.RecordData, 50)
+
+	svr.httpServer = http.Server{}
 	sm := http.NewServeMux()
 
-	sm.HandleFunc("/data", s.receiveData)
-	sm.HandleFunc("/ping", s.ping)
-	sm.HandleFunc("/getitems", s.getItems)
-	sm.HandleFunc("/retrieveitem", s.retrieveItem)
-	sm.HandleFunc("/getdoctypes", s.getDocTypes)
-	sm.HandleFunc("/adddoctype", s.addDocType)
-	sm.HandleFunc("/deletedoctype", s.deleteDocType)
+	sm.HandleFunc("/data", svr.receiveData)
+	sm.HandleFunc("/ping", svr.ping)
+	sm.HandleFunc("/getitems", svr.getItems)
+	sm.HandleFunc("/retrieveitem", svr.retrieveItem)
+	sm.HandleFunc("/getdoctypes", svr.getDocTypes)
+	sm.HandleFunc("/adddoctype", svr.addDocType)
+	sm.HandleFunc("/deletedoctype", svr.deleteDocType)
 
-	s.httpServer.Handler = sm
+	svr.httpServer.Handler = sm
 
-	return nil
+	return &svr, nil
 }
 
 // Startup the listening server
@@ -74,7 +96,7 @@ func (s *Server) Start() error {
 	//TODO configurable
 	for range 1 {
 		//Kick off routine(s) to listen for new items to process
-		go process(s.ch, s.ModOutput, s.DocIdentifierRegion, s.DocumentTypes)
+		go process(s.chPendingDocs, s.ModOutput, s.DocIdentifierRegion, s.DocumentTypes)
 	}
 
 	go s.httpServer.Serve(s.l)
@@ -98,57 +120,123 @@ func (s *Server) Stop() error {
 
 	s.httpServer.Close()
 
-	if s.ch != nil {
-		close(s.ch)
-		s.ch = nil
+	if s.chPendingDocs != nil {
+		close(s.chPendingDocs)
+		s.chPendingDocs = nil
 	}
 
 	return nil
 }
 
-// Func for goroutines to process incoming submissions to /data
-func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, docTypeRegion image.Rectangle, documentTypes map[string]structs.DocumentType) {
-	//Waiting for new item to process
-	//TODO handle concurrency; create standalone item in func
-	for outModule.IFile = range ch {
-		log.Printf("Process routine received new item for processing: %s", outModule.IFile.Name)
+func checkRectangle(rImage image.Rectangle, rRegion image.Rectangle) bool {
+	if rImage.Min.X < rRegion.Min.X || rImage.Min.Y < rRegion.Min.Y {
+		return false
+	} else if rImage.Max.X < rRegion.Max.X || rImage.Max.Y < rRegion.Max.Y {
+		return false
+	}
 
-		img := ocr.ConvertToGray(outModule.IFile.ImgData)
+	return true
+}
 
-		docIdentifier, err := ocr.ReadRegion(img, docTypeRegion)
+func LoadDocumentTypes(directory string) (map[string]structs.DocumentType, error) {
+	if strings.TrimSpace(directory) == "" {
+		return nil, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
+	} else if _, err := os.Stat(directory); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			//If no matching directory exists, create it
+			err = os.MkdirAll(directory, os.ModePerm)
 
-		if err != nil {
-			log.Fatalf("Failed to get Document Type: %s", err)
+			if err != nil {
+				return nil, err
+			}
+
+			//Since it didn't exist no document types to return
+			return map[string]structs.DocumentType{}, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	types, err := os.ReadDir(directory)
+
+	if err != nil {
+		return nil, err
+	}
+
+	docTypes := make(map[string]structs.DocumentType, len(types))
+
+	for _, dirEntry := range types {
+		if dirEntry.IsDir() {
+			continue
 		}
 
-		docType, found := documentTypes[strings.ToLower(docIdentifier[:8])]
+		f, err := os.OpenInRoot(directory, dirEntry.Name())
 
-		if found {
-			outModule.IFile.DocType = docType.Title
+		if err != nil {
+			return nil, err
+		}
+
+		d := structs.DocumentType{}
+		err = json.NewDecoder(f).Decode(&d)
+
+		if err != nil {
+			return nil, err
+		}
+
+		docTypes[d.Identifier] = d
+	}
+
+	return docTypes, nil
+}
+
+// Func for goroutines to process incoming submissions to /data
+func process(ch <-chan gsRecord.RecordData, outModule outputs.Module, docTypeRegion image.Rectangle, documentTypes map[string]structs.DocumentType) {
+	//Waiting for new item to process
+	for newRecord := range ch {
+		log.Printf("Process routine received new item for processing: %s", newRecord.Name)
+
+		img := ocr.ConvertToGray(newRecord.ImgData)
+		var docType structs.DocumentType
+		var err error
+
+		if checkRectangle(img.Bounds(), docTypeRegion) {
+			docIdentifier, err := ocr.ReadRegion(img, docTypeRegion)
+
+			if err != nil {
+				log.Fatalf("Failed to get Document Type: %s", err)
+			}
+
+			docType, found := documentTypes[strings.ToLower(docIdentifier[:8])]
+
+			if found {
+				newRecord.DocType = docType.Title
+			} else {
+				//TODO configurable
+				newRecord.DocType = "Default"
+			}
 		} else {
-			//TODO configurable
-			outModule.IFile.DocType = "Default"
+			newRecord.DocType = "Default"
 		}
 
 		// Read and save off the document data via OCR
-		if found && len(docType.Regions) > 0 {
+		if len(docType.Regions) > 0 {
 			for _, docRegions := range docType.Regions {
 
-				outModule.IFile.OCRData[docRegions.FieldName], err = ocr.ReadRegion(img, docRegions.Region)
+				newRecord.OCRData[docRegions.FieldName], err = ocr.ReadRegion(img, docRegions.Region)
 
 				if err != nil {
-					log.Fatalf("Failed to read image region %v for image %s", docRegions.RegionTitle, outModule.IFile.Name)
+					log.Fatalf("Failed to read image region %v for image %s", docRegions.RegionTitle, newRecord.Name)
 				}
 
-				outModule.IFile.OCRData[docRegions.FieldName] = strings.TrimRight(outModule.IFile.OCRData[docRegions.FieldName], "\n")
+				newRecord.OCRData[docRegions.FieldName] = strings.TrimRight(newRecord.OCRData[docRegions.FieldName], "\n")
 			}
 		} else {
 			//If no regions are defined, read the entire image as a single field
 			//TODO configurable
-			outModule.IFile.OCRData["data"], err = ocr.ReadRegion(img, img.Bounds())
+			newRecord.OCRData["data"], err = ocr.ReadRegion(img, img.Bounds())
 
 			if err != nil {
-				log.Fatalf("Failed to read data for %s", outModule.IFile.Name)
+				log.Fatalf("Failed to read data: %s", err)
 			}
 		}
 
@@ -157,7 +245,7 @@ func process(ch <-chan gsRecord.RecordData, outModule *outputFile.OutputModule, 
 		}
 
 		// Save off the incoming data via the Output Module
-		if err := outModule.Save(); err != nil {
+		if err := outModule.Save(&newRecord); err != nil {
 			panic(err)
 		}
 	}
@@ -176,7 +264,7 @@ func (dr *Server) receiveData(w http.ResponseWriter, req *http.Request) {
 
 	d.OCRData = map[string]string{}
 
-	dr.ch <- d
+	dr.chPendingDocs <- d
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -190,7 +278,7 @@ func (dr *Server) ping(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) getItems(w http.ResponseWriter, req *http.Request) {
-	items, err := s.ModOutput.List()
+	items, err := s.ModOutput.ListItems()
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -218,7 +306,7 @@ func (s *Server) retrieveItem(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	record, err := s.ModOutput.GetItem(itemReq.ItemName)
+	record, err := s.ModOutput.Retrieve(itemReq.ItemName)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -246,7 +334,7 @@ func (s *Server) getDocTypes(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
-	d := bytes.Buffer{}
+	d := structs.ReqDeleteDocumentType{}
 	err := json.NewDecoder(req.Body).Decode(&d)
 
 	if err != nil {
@@ -254,12 +342,11 @@ func (s *Server) deleteDocType(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	//TODO sort out parsing the incoming request
-	if docType, ok := s.DocumentTypes[""]; !ok {
+	if _, ok := s.DocumentTypes[d.DocumentType]; !ok {
 		w.WriteHeader(http.StatusBadRequest)
 	} else {
-		delete(s.DocumentTypes, docType.Title)
-		os.Remove(docType.Identifier)
+		delete(s.DocumentTypes, d.DocumentType)
+		s.DocumentTypeRoot.Remove(d.DocumentType)
 
 		w.WriteHeader(http.StatusOK)
 	}
@@ -287,7 +374,7 @@ func (s *Server) addDocType(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fil, err := os.Create(filepath.Join(s.DocumentLocation, d.Identifier))
+	fil, err := s.DocumentTypeRoot.Open(d.Identifier)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

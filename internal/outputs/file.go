@@ -1,5 +1,5 @@
 // Output module for saving result to file storage
-package outputFile
+package outputs
 
 import (
 	"encoding/json"
@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -17,22 +16,21 @@ import (
 	"github.com/bensoncarlb/GoScan/structs"
 )
 
-type OutputModule struct {
+type OutputFile struct {
 	Directory string
-	IFile     gsRecord.RecordData
 }
 
 // Take the provided OutputModule.IFile and save the data to a file location
-func (o *OutputModule) Save() error {
-	log.Printf("Recieved output data: %s", o.IFile.Name)
+func (o OutputFile) Save(record *gsRecord.RecordData) error {
+	log.Printf("Recieved output data: %s", record.Name)
 
-	if strings.TrimSpace(o.IFile.Name) == "" {
+	if strings.TrimSpace(record.Name) == "" {
 		//TODO enumerate reasons
 		return gserrors.ErrBadParam{Parameter: "Name", Reason: "Missing"}
 	}
 
 	//Save off received data
-	filImg, err := os.Create(path.Join(o.Directory, o.IFile.Name))
+	filImg, err := os.Create(path.Join(o.Directory, record.Name))
 
 	if err != nil {
 		return err
@@ -40,7 +38,7 @@ func (o *OutputModule) Save() error {
 
 	defer filImg.Close()
 
-	n, err := filImg.Write(o.IFile.ImgData)
+	n, err := filImg.Write(record.ImgData)
 
 	if err != nil {
 		return err
@@ -48,7 +46,7 @@ func (o *OutputModule) Save() error {
 
 	log.Printf("Wrote image file containing %d bytes", n)
 
-	filData, err := os.Create(path.Join(o.Directory, o.IFile.Name+".txt"))
+	filData, err := os.Create(path.Join(o.Directory, record.Name+".txt"))
 
 	if err != nil {
 		return err
@@ -56,7 +54,7 @@ func (o *OutputModule) Save() error {
 
 	defer filData.Close()
 
-	data, err := json.Marshal(o.IFile)
+	data, err := json.Marshal(record)
 
 	if err != nil {
 		panic(err)
@@ -73,33 +71,39 @@ func (o *OutputModule) Save() error {
 	return nil
 }
 
-// Setup a new output module targeted to the provided Directory
-func New(Directory string) (OutputModule, error) {
-	if strings.TrimSpace(Directory) == "" {
-		return OutputModule{}, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
+func (o OutputFile) validate() error {
+	if strings.TrimSpace(o.Directory) == "" {
+		return gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing"}
 	}
 
-	outModule := OutputModule{Directory: Directory}
+	return nil
+}
 
-	//Check the directory to store received data in exists
-	fi, err := os.Stat(Directory)
+func (o OutputFile) Init() error {
+	err := o.validate()
+
+	if err != nil {
+		return err
+	}
+
+	fi, err := os.Stat(o.Directory)
 
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			err = os.MkdirAll(Directory, os.ModePerm)
+			err = os.MkdirAll(o.Directory, os.ModePerm)
 		}
 
 		if err != nil {
-			return OutputModule{}, err
+			return err
 		}
 	} else if !fi.IsDir() {
-		return OutputModule{}, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Directory is a File"}
+		return gserrors.ErrBadParam{Parameter: "Directory", Reason: "Directory is a File"}
 	}
 
-	return outModule, err
+	return nil
 }
 
-func (o *OutputModule) List() (structs.RspGetItems, error) {
+func (o OutputFile) ListItems() (structs.RspGetItems, error) {
 	if strings.TrimSpace(o.Directory) == "" {
 		return structs.RspGetItems{}, errors.New("no output Directory configured")
 	}
@@ -121,10 +125,9 @@ func (o *OutputModule) List() (structs.RspGetItems, error) {
 	return structs.RspGetItems{Items: slices.Clip(dirFiles)}, nil
 }
 
-func (o *OutputModule) GetItem(itemName string) (*gsRecord.RecordData, error) {
-	fil, err := os.Open(filepath.Join(o.Directory, itemName))
-	//TODO os.openroot
-	//os.root.Open ...
+func (o OutputFile) Retrieve(itemName string) (*gsRecord.RecordData, error) {
+	fil, err := os.OpenInRoot(o.Directory, itemName)
+
 	if err != nil {
 		return &gsRecord.RecordData{}, err
 	}

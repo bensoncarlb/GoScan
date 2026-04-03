@@ -1,7 +1,5 @@
-// Data Souce module from File Pickups
-package sourceFile
+package inputs
 
-//TODO  move to Sources type package for all sourcesa
 import (
 	"bytes"
 	"encoding/json"
@@ -10,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bensoncarlb/GoScan/internal/gsRecord"
@@ -19,7 +18,7 @@ import (
 )
 
 // TODO rename to a ~FileConfig
-type SourceConfig struct {
+type FileWatch struct {
 	isRunning    bool
 	Directory    string
 	DataEndpoint string
@@ -27,11 +26,9 @@ type SourceConfig struct {
 	chFiles      chan string
 }
 
-/*
-* Monitor for new file events and filter out duplicates
-* fsnotify doesn't expose an event for file close, so there are often duplicates
-* due to the file system doing a write as multiple events.
- */
+// Monitor for new file events and filter out duplicates
+// fsnotify doesn't expose an event for file close, so there are often duplicates
+// due to the file system doing a write as multiple events.
 func fileWatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 	log.Printf("File watcher starting up")
 	seenFiles := expiring.NewTable[string, bool]()
@@ -66,16 +63,9 @@ func fileWatch(fsWatch *fsnotify.Watcher, chEvents chan string) {
 	}
 }
 
-/*
-* goroutine for handling new files on the specified (SourceConfig.Directory) location
- */
+// fileEvents handles processing new files picked up from the specified (file.Directory) location.
 func fileEvents(chFiles <-chan string, DataEndpoint string) {
-	for {
-		file, ok := <-chFiles
-
-		if !ok {
-			return
-		}
+	for file := range chFiles {
 		log.Printf("Received notification about new file: %s", file)
 
 		f, err := os.ReadFile(file)
@@ -101,29 +91,35 @@ func fileEvents(chFiles <-chan string, DataEndpoint string) {
 		if err != nil {
 			panic(err)
 		}
+
+		//Clean up file
+		err = os.Remove(file)
+
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
-/*
-* Start the FileWatch
- */
-func (c *SourceConfig) Start() error {
-	// TODO track and check if already started
+// Start the FileWatch
+func (c FileWatch) Start() error {
 	if c.isRunning {
 		return nil
 	}
 
 	var err error
+	//TODO configurable
 	c.fsWatch, err = fsnotify.NewBufferedWatcher(30)
 
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Watching %s", c.Directory)
 	if err := c.fsWatch.Add(c.Directory); err != nil {
 		return err
 	}
+
+	log.Printf("Watching %s", c.Directory)
 
 	//TODO configurable
 	c.chFiles = make(chan string, 50)
@@ -131,10 +127,23 @@ func (c *SourceConfig) Start() error {
 	go fileWatch(c.fsWatch, c.chFiles)
 
 	//Spawn worker
-
 	//TODO configurable
 	for range 1 {
 		go fileEvents(c.chFiles, c.DataEndpoint)
+	}
+
+	existingFiles, err := os.ReadDir(c.Directory)
+
+	if err != nil {
+		c.Stop()
+		return err
+	}
+
+	for _, f := range existingFiles {
+		//TODO check Type instead
+		if !f.IsDir() {
+			c.chFiles <- filepath.Join(c.Directory, f.Name())
+		}
 	}
 
 	c.isRunning = true
@@ -142,10 +151,8 @@ func (c *SourceConfig) Start() error {
 	return nil
 }
 
-/*
-* Cleanly stop the FileWatcher
- */
-func (c *SourceConfig) Stop() error {
+// Cleanly stop the FileWatcher
+func (c FileWatch) Stop() error {
 	if !c.isRunning {
 		return nil
 	}
@@ -164,25 +171,38 @@ func (c *SourceConfig) Stop() error {
 	return nil
 }
 
-/*
-* Validate and prepare a SourceConfig to file pickup
- */
-func New(Directory string, DataEndpoint string) (SourceConfig, error) {
-	//TODO strings.TrimSpace(Directory) = ""
-	if len(Directory) == 0 {
-		return SourceConfig{}, gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing value"}
-	} else if len(DataEndpoint) == 0 {
-		return SourceConfig{}, gserrors.ErrBadParam{Parameter: "DataEndPoint", Reason: "Missing"}
+func (s FileWatch) validate() error {
+	if strings.TrimSpace(s.Directory) == "" {
+		return gserrors.ErrBadParam{Parameter: "Directory", Reason: "Missing value"}
+	} else if strings.TrimSpace(s.DataEndpoint) == "" {
+		return gserrors.ErrBadParam{Parameter: "DataEndPoint", Reason: "Missing"}
 	}
 
-	if _, err := os.Stat(Directory); errors.Is(err, os.ErrNotExist) {
-		err = os.Mkdir(Directory, os.ModePerm)
-		if err != nil {
-			return SourceConfig{}, err
+	return nil
+}
+
+// Validate and prepare a SourceConfig to file pickup
+func (f FileWatch) Init() error {
+	if err := f.validate(); err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(f.Directory); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			//If no matching directory exists, create it
+			err = os.MkdirAll(f.Directory, os.ModePerm)
+
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
 		}
-	} else if err != nil {
-		return SourceConfig{}, err
 	}
 
-	return SourceConfig{Directory: Directory, DataEndpoint: DataEndpoint}, nil
+	return nil
+}
+
+func (f FileWatch) IsReady() (bool, error) {
+	return f.isRunning, nil
 }
